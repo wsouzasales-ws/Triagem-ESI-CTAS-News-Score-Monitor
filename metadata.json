@@ -1,0 +1,5 @@
+{
+  "name": "HSMC - Triagem ASI + CTAS",
+  "description": "Dashboard de acolhimento para avaliação de sinais vitais, cálculo automático de NEWS e triagem de protocolos (AVC, Sepse, Dor Torácica).",
+  "requestFramePermissions": []
+}
