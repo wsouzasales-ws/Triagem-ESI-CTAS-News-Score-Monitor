@@ -21,15 +21,18 @@ const SYMPTOM_LABELS: Record<string, string> = {
     'neuro_visual': 'Alteração Visual Súbita',
     'neuro_marcha': 'Alteração de Marcha',
     'neuro_consciencia': 'Rebaixamento Súbito Consciência',
+    
+    // Protocolo SCA - Dor Torácica
     'sca_a_tipica': 'Dor Torácica Típica (A)',
     'sca_a_bracos': 'Irradiação Braços (A)',
-    'sca_a_pescoco': 'Irradiação Pescoço (A)',
-    'sca_b_estomago': 'Dor Estômago (B)',
-    'sca_b_costas': 'Dor Costas (B)',
-    'sca_c_dispneia': 'Falta de Ar (C)',
-    'sca_c_sudorese': 'Suor Frio (C)',
+    'sca_a_pescoco': 'Irradiação Pescoço/Mandíbula (A)',
+    'sca_b_estomago': 'Dor Epigástrica (B)',
+    'sca_b_costas': 'Dor Dorsal (B)',
+    'sca_c_dispneia': 'Falta de Ar / Dispneia (C)',
+    'sca_c_sudorese': 'Suor Frio / Sudorese (C)',
     'sca_c_palpitacao': 'Palpitação (C)',
-    'sca_c_malsubito': 'Mal Súbito (C)',
+    'sca_c_malsubito': 'Mal Súbito / Náusea (C)',
+    
     'inf_infeccao': 'Infecção Suspeita/Confirmada',
     'inf_oliguria': 'Redução de Diurese'
 };
@@ -642,7 +645,11 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
                       {/* Toracica */}
                       <div>
                           <h5 className="text-[10px] font-bold text-red-600 uppercase mb-2 border-b border-red-100 pb-1 flex items-center gap-1"><Heart size={10}/> Dor Torácica</h5>
-                          {['sca_a_tipica', 'sca_a_bracos', 'sca_c_dispneia', 'sca_c_sudorese', 'sca_c_palpitacao'].map(id => (
+                          {[
+                              'sca_a_tipica', 'sca_a_bracos', 'sca_a_pescoco', 
+                              'sca_b_estomago', 'sca_b_costas', 
+                              'sca_c_dispneia', 'sca_c_sudorese', 'sca_c_palpitacao', 'sca_c_malsubito'
+                          ].map(id => (
                               <SymptomCheck key={id} id={id} label={SYMPTOM_LABELS[id]} />
                           ))}
                       </div>
