@@ -15,7 +15,7 @@ export interface VitalSigns {
 
 export interface PatientData {
   name: string;
-  medicalRecord: string; // Nº Atendimento
+  medicalRecord: string; // Nº Prontuário
   dob: string; // Date of Birth
   age: number; // Idade calculada em anos (ou meses se < 1 ano, tratado na lógica)
   ageUnit: 'years' | 'months';
