@@ -500,7 +500,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                     {row.complaint && !row.discriminators && (
                                          <div className="bg-yellow-50 text-yellow-800 border border-yellow-100 text-[10px] p-1.5 rounded flex items-start gap-1 mt-1">
                                             <Info size={12} className="shrink-0 mt-0.5"/>
-                                            <span className="uppercase line-clamp-1">{row.complaint}</span>
+                                            <span className="uppercase whitespace-normal break-words leading-tight">{row.complaint}</span>
                                         </div>
                                     )}
                                 </div>
