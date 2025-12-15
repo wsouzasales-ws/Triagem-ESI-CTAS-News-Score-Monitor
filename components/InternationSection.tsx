@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, CalendarDays, Clock, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Brain, Zap, Check, MessageSquare, Droplet, Heart, Thermometer, Wind, Smile, Meh, Frown, RefreshCw, Search, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { User, CalendarDays, Clock, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Brain, Zap, Check, MessageSquare, Droplet, Heart, Thermometer, Wind, Smile, Meh, Frown, RefreshCw, Search, AlertTriangle, RefreshCcw, Flame } from 'lucide-react';
 import { PatientData, VitalSigns, NewsResult } from '../types';
 import { calculateNEWS } from '../utils/newsCalculator';
 import { evaluateProtocols } from '../utils/protocolEngine';
-import { fetchWithRetry } from '../utils/api'; // NOVO IMPORT
+import { fetchWithRetry } from '../utils/api'; 
 
 interface Props {
   scriptUrl: string;
@@ -164,7 +164,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
 
   const handleSubmit = async () => {
     if (!patient.name || !patient.medicalRecord) {
-        setNotification({ msg: 'Preencha Nome (Iniciais) e Atendimento.', type: 'error' });
+        setNotification({ msg: 'Preencha Nome (Iniciais) e Prontuário.', type: 'error' });
         return;
     }
 
@@ -197,7 +197,6 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
     };
 
     try {
-        // USO DE FETCH ROBUSTO COM RETRY
         await fetchWithRetry(scriptUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -405,4 +404,290 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
                                 checked={patient.isReevaluation}
                                 onChange={e => setPatient(prev => ({...prev, isReevaluation: e.target.checked}))}
                             />
-                            <div className="flex items-center gap-0.5 text-[10px] font-bold text-slate-700
+                            <div className="flex items-center gap-0.5 text-[10px] font-bold text-slate-700">
+                                <RefreshCw size={10} className={patient.isReevaluation ? "text-teal-600" : "text-slate-400"} />
+                                <span>REAVALIAÇÃO?</span>
+                            </div>
+                         </label>
+                         
+                         {patient.isReevaluation && (
+                             <button 
+                               onClick={handleSearchHistory}
+                               disabled={isSearchingHistory || isSyncing}
+                               className="ml-auto bg-teal-600 hover:bg-teal-700 text-white p-1.5 rounded disabled:opacity-50 transition-colors"
+                               title="Buscar Histórico Anterior"
+                             >
+                                 {isSearchingHistory ? <RefreshCcw className="animate-spin" size={16}/> : <Search size={16}/>}
+                             </button>
+                         )}
+                     </div>
+                 </div>
+             </div>
+         </div>
+
+         {/* Localização (Setor/Leito) */}
+         <div className="grid grid-cols-2 gap-4 mt-4">
+             <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Setor</label>
+                <select 
+                    value={patient.sector}
+                    onChange={e => setPatient(prev => ({...prev, sector: e.target.value}))}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-teal-500"
+                >
+                    <option value="">Selecione...</option>
+                    <option value="Clínica Médica">Clínica Médica</option>
+                    <option value="Clínica Cirúrgica">Clínica Cirúrgica</option>
+                    <option value="UTI Geral">UTI Geral</option>
+                    <option value="UTI Coronariana">UTI Coronariana</option>
+                    <option value="Emergência">Emergência</option>
+                </select>
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Leito</label>
+                <input 
+                    type="text" 
+                    value={patient.bed}
+                    onChange={e => setPatient(prev => ({...prev, bed: e.target.value}))}
+                    placeholder="Ex: 204-A"
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-teal-500 uppercase"
+                />
+             </div>
+         </div>
+      </div>
+
+      {/* ALERTA SE PACIENTE ENCONTRADO */}
+      {internationHistory && (
+          <div className="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded shadow-sm">
+              <div className="flex justify-between items-start">
+                  <div>
+                      <h4 className="text-indigo-900 font-bold text-sm mb-1 flex items-center gap-2">
+                          <Activity size={16}/> Última Avaliação Encontrada
+                      </h4>
+                      <p className="text-xs text-indigo-700">
+                          Data: <strong>{internationHistory.lastDate} às {internationHistory.lastTime}</strong>
+                      </p>
+                      {internationHistory.newsScore && (
+                          <div className="mt-2 inline-flex items-center gap-2 bg-white px-2 py-1 rounded border border-indigo-100">
+                              <span className="text-[10px] font-bold text-slate-500">NEWS ANTERIOR:</span>
+                              <span className={`text-sm font-black ${parseInt(internationHistory.newsScore) >= 5 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                  {internationHistory.newsScore}
+                              </span>
+                          </div>
+                      )}
+                  </div>
+                  {internationHistory.lastVitals && (
+                      <div className="text-right hidden md:block">
+                          <div className="text-[10px] text-indigo-400 uppercase font-bold mb-1">Sinais Vitais Anteriores</div>
+                          <div className="grid grid-cols-4 gap-1 text-xs text-slate-600 font-mono">
+                              <span className="bg-white px-1 rounded">PA: {internationHistory.lastVitals.pas}x{internationHistory.lastVitals.pad}</span>
+                              <span className="bg-white px-1 rounded">FC: {internationHistory.lastVitals.fc}</span>
+                              <span className="bg-white px-1 rounded">Spo2: {internationHistory.lastVitals.spo2}%</span>
+                              <span className="bg-white px-1 rounded">Temp: {internationHistory.lastVitals.temp}</span>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {/* SINAIS VITAIS - INPUTS */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-4 border-b pb-2">
+              <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
+                  <Stethoscope className="text-teal-600"/> Sinais Vitais
+              </h3>
+              <div className="text-xs text-slate-400">Preenchimento Obrigatório</div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              {renderVitalInput('PA Sistólica', 'pas', 'mmHg', <Activity size={12}/>, 1)}
+              {renderVitalInput('PA Diastólica', 'pad', 'mmHg', <Activity size={12}/>, 1)}
+              {renderVitalInput('Freq. Cardíaca', 'fc', 'bpm', <Heart size={12}/>, 1)}
+              {renderVitalInput('Freq. Resp.', 'fr', 'irpm', <Wind size={12}/>, 1)}
+              {renderVitalInput('Temperatura', 'temp', '°C', <Thermometer size={12}/>, 0.1)}
+              {renderVitalInput('Saturação O2', 'spo2', '%', <Droplet size={12}/>, 1)}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-4 border-t border-slate-100">
+              {/* O2 SUPLEMENTAR */}
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="text-xs font-bold text-slate-700 uppercase">Uso de O2 Suplementar?</span>
+                  <div className="flex gap-2">
+                      <button 
+                        onClick={() => setVitals(prev => ({...prev, o2Sup: false}))}
+                        className={`px-4 py-1.5 rounded text-xs font-bold transition-colors ${!vitals.o2Sup ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-slate-500 border hover:bg-slate-100'}`}
+                      >
+                          NÃO
+                      </button>
+                      <button 
+                        onClick={() => setVitals(prev => ({...prev, o2Sup: true}))}
+                        className={`px-4 py-1.5 rounded text-xs font-bold transition-colors ${vitals.o2Sup ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-500 border hover:bg-slate-100'}`}
+                      >
+                          SIM
+                      </button>
+                  </div>
+              </div>
+
+              {/* NIVEL CONSCIENCIA */}
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="text-xs font-bold text-slate-700 uppercase">Nível Consciência</span>
+                  <select 
+                    value={vitals.consciousness}
+                    onChange={e => setVitals(prev => ({...prev, consciousness: e.target.value as any}))}
+                    className={`p-1.5 rounded text-xs font-bold outline-none border-2 cursor-pointer ${vitals.consciousness === 'Alert' ? 'border-emerald-200 text-emerald-800 bg-emerald-50' : 'border-rose-200 text-rose-800 bg-rose-50'}`}
+                  >
+                      <option value="Alert">Alerta (A)</option>
+                      <option value="Confused">Confuso (C)</option>
+                      <option value="Pain">Resp. Dor (P)</option>
+                      <option value="Unresponsive">Inconsciente (U)</option>
+                  </select>
+              </div>
+          </div>
+
+          {/* ESCALA DE DOR */}
+          <div className="mt-6">
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-2 flex items-center gap-1">
+                  <Activity size={12}/> Escala de Dor
+              </label>
+              <div className="flex gap-1 h-12 w-full">
+                  {Array.from({ length: 11 }, (_, i) => i).map((level) => {
+                    const cfg = getPainConfig(level);
+                    const isSelected = vitals.painLevel === level;
+                    return (
+                        <button 
+                            key={level} 
+                            onClick={() => setVitals(prev => ({...prev, painLevel: level}))} 
+                            className={`flex-1 rounded-md text-white font-bold text-sm transition-all shadow-sm ${cfg.color} ${isSelected ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10' : 'opacity-40 hover:opacity-100 hover:scale-105'}`}
+                        >
+                            {level}
+                        </button>
+                    );
+                  })}
+              </div>
+              <div className="flex justify-between items-center mt-2 h-6">
+                 {painConfig ? (
+                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${painConfig.color.replace('bg-', 'text-').replace('400','600').replace('500','700')}`}>
+                         {painConfig.label}
+                     </span>
+                 ) : <span></span>}
+                 <PainIcon size={24} className={painConfig ? painConfig.text : 'text-slate-300'} />
+              </div>
+          </div>
+      </div>
+
+      {/* RESULTADO NEWS */}
+      <div className={`rounded-lg shadow-md border-l-8 overflow-hidden transition-all duration-500 ${newsResult.score >= 5 ? 'bg-rose-50 border-rose-600' : newsResult.score >= 1 ? 'bg-yellow-50 border-yellow-500' : 'bg-emerald-50 border-emerald-500'}`}>
+          <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl font-black shadow-inner bg-white ${newsResult.score >= 5 ? 'text-rose-600' : newsResult.score >= 1 ? 'text-yellow-600' : 'text-emerald-600'}`}>
+                      {newsResult.score}
+                  </div>
+                  <div>
+                      <h3 className="text-sm font-bold opacity-60 uppercase mb-1">Pontuação NEWS</h3>
+                      <div className={`text-xl font-black uppercase leading-none ${newsResult.score >= 5 ? 'text-rose-800' : newsResult.score >= 1 ? 'text-yellow-800' : 'text-emerald-800'}`}>
+                          {newsResult.riskText}
+                      </div>
+                  </div>
+              </div>
+              
+              <div className="w-full md:w-1/2 bg-white/60 p-3 rounded-lg border border-black/5">
+                  <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                      <Activity size={10}/> Conduta Recomendada
+                  </h4>
+                  <p className="text-sm font-bold text-slate-800">
+                      {getNewsActionMessage(newsResult.score)}
+                  </p>
+              </div>
+          </div>
+      </div>
+
+      {/* SINTOMAS E OBSERVACAO */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          
+          {/* Alertas de Protocolo Ativos */}
+          {activeProtocols.length > 0 && (
+              <div className="mb-6 space-y-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Protocolos Detectados</h4>
+                  {activeProtocols.map((alert, idx) => (
+                      <div key={idx} className="bg-slate-900 text-white p-3 rounded shadow-sm border border-slate-700 animate-pulse flex items-start gap-3">
+                          <AlertTriangle className="text-yellow-400 shrink-0 mt-0.5" size={18} />
+                          <div>
+                              <strong className="block text-sm uppercase text-yellow-400">PROTOCOLO {alert.type.toUpperCase()}</strong>
+                              <p className="text-xs opacity-80">{alert.reason.join(', ')}</p>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          )}
+
+          {/* Accordion Sintomas */}
+          <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
+              <button 
+                onClick={() => setIsSymptomsOpen(!isSymptomsOpen)}
+                className="w-full bg-slate-50 p-3 flex justify-between items-center text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                  <span className="flex items-center gap-2"><Check size={14}/> Checklist de Sintomas (Opcional)</span>
+                  {isSymptomsOpen ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+              </button>
+              
+              {isSymptomsOpen && (
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white animate-fade-in">
+                      {/* Neuro */}
+                      <div>
+                          <h5 className="text-[10px] font-bold text-indigo-600 uppercase mb-2 border-b border-indigo-100 pb-1 flex items-center gap-1"><Brain size={10}/> Neurológico</h5>
+                          {['neuro_rima', 'neuro_forca', 'neuro_fala', 'neuro_cefaleia', 'neuro_vertigem', 'neuro_visual'].map(id => (
+                              <SymptomCheck key={id} id={id} label={SYMPTOM_LABELS[id]} />
+                          ))}
+                      </div>
+                      {/* Toracica */}
+                      <div>
+                          <h5 className="text-[10px] font-bold text-red-600 uppercase mb-2 border-b border-red-100 pb-1 flex items-center gap-1"><Heart size={10}/> Dor Torácica</h5>
+                          {['sca_a_tipica', 'sca_a_bracos', 'sca_c_dispneia', 'sca_c_sudorese', 'sca_c_palpitacao'].map(id => (
+                              <SymptomCheck key={id} id={id} label={SYMPTOM_LABELS[id]} />
+                          ))}
+                      </div>
+                      {/* Infeccao */}
+                      <div>
+                          <h5 className="text-[10px] font-bold text-orange-600 uppercase mb-2 border-b border-orange-100 pb-1 flex items-center gap-1"><Flame size={10}/> Infeccioso</h5>
+                          {['inf_infeccao', 'inf_oliguria'].map(id => (
+                              <SymptomCheck key={id} id={id} label={SYMPTOM_LABELS[id]} />
+                          ))}
+                      </div>
+                  </div>
+              )}
+          </div>
+
+          <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                  <MessageSquare size={14}/> Observações Gerais
+              </label>
+              <textarea 
+                  className="w-full p-3 border border-slate-300 rounded bg-slate-50 text-sm focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-colors"
+                  rows={3}
+                  placeholder="Descreva queixas adicionais ou detalhes relevantes..."
+                  value={observations}
+                  onChange={e => setObservations(e.target.value)}
+              />
+          </div>
+      </div>
+
+      {/* FOOTER ACTIONS */}
+      <div className="flex items-center justify-end gap-3 mt-6">
+          <button 
+            onClick={handlePrint}
+            className="px-6 py-3 bg-slate-700 text-white font-bold rounded shadow hover:bg-slate-800 transition-colors flex items-center gap-2"
+          >
+              <Printer size={18}/> PDF
+          </button>
+          <button 
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="px-8 py-3 bg-teal-600 text-white font-bold rounded shadow hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+              {isSubmitting ? 'Salvando...' : <><Save size={18}/> FINALIZAR AVALIAÇÃO</>}
+          </button>
+      </div>
+
+    </div>
+  );
+};
