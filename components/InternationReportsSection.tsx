@@ -95,7 +95,7 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
 
     const dataToExport = processedReports.highRiskList.map(item => ({
         'Paciente': item.name,
-        'Nº Prontuário': item.medicalRecord,
+        'Prontuário/AT': item.medicalRecord,
         'NEWS Score': item.newsScore,
         'Risco': item.riskText,
         'Data Avaliação': item.evaluationDate,
@@ -289,5 +289,3 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
     </div>
   );
 });
-
-export default InternationReportsSection;
