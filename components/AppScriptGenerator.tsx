@@ -11,7 +11,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [copied, setCopied] = useState(false);
 
-  // Script v44: Padronização para Nº Prontuário nos cabeçalhos
+  // Script v45: Correção da busca no Histórico (filterHistory)
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -102,7 +102,7 @@ function setupStructure() {
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura Organizada (v44): Headers Prontuário.";
+  return "Estrutura Organizada (v45): Headers Prontuário + FilterHistory Fix.";
 }
 
 function doGet(e) {
@@ -115,7 +115,7 @@ function doGet(e) {
        if (lock.tryLock(5000)) { 
           try { setupStructure(); } finally { lock.releaseLock(); }
        }
-       return jsonResponse({ "result": "success", "message": "Script v44 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v45 Online" });
     }
 
     var sheet = ss.getSheets()[0];
@@ -196,6 +196,64 @@ function handleReadActions(action, e, ss, sheet) {
       return jsonResponse({ "result": "not_found" });
     }
 
+    if (action === 'filterHistory') {
+       var searchId = e.parameter.medicalRecord ? String(e.parameter.medicalRecord).trim() : "";
+       var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
+       
+       var values = sheet.getDataRange().getDisplayValues();
+       var resultRows = [];
+       
+       for (var i = 1; i < values.length; i++) {
+          var row = values[i];
+          var rowId = String(row[4] || "").trim(); // Prontuário
+          var rowDate = String(row[1] || "").trim(); // Data Avaliação
+          var rowSystemDate = String(row[0] || "").split(' ')[0].trim(); // Data Sistema
+          
+          var matchId = true;
+          if (searchId) {
+             matchId = (rowId === searchId);
+          }
+          
+          var matchDate = true;
+          if (searchDate) {
+             var dParts = rowDate.includes('/') ? rowDate.split('/') : rowDate.split('-');
+             var isoDate = "";
+             if (dParts.length === 3) {
+                if (dParts[0].length === 4) isoDate = dParts.join('-'); // Já é ISO
+                else isoDate = dParts[2] + '-' + dParts[1] + '-' + dParts[0]; // BR para ISO
+             }
+             
+             if (!isoDate && rowSystemDate) {
+                 var sParts = rowSystemDate.includes('/') ? rowSystemDate.split('/') : rowSystemDate.split('-');
+                 if (sParts.length === 3) {
+                    if (sParts[0].length === 4) isoDate = sParts.join('-');
+                    else isoDate = sParts[2] + '-' + sParts[1] + '-' + sParts[0];
+                 }
+             }
+
+             if (isoDate !== searchDate) matchDate = false;
+          }
+          
+          if (matchId && matchDate) {
+             resultRows.push({
+                systemTimestamp: row[0],
+                evaluationDate: row[1] || row[0].split(' ')[0], 
+                evaluationTime: row[2], 
+                name: row[3], 
+                medicalRecord: row[4],
+                isReevaluation: row[5], 
+                age: row[6], 
+                complaint: row[7], 
+                esiLevel: row[15], 
+                triageTitle: row[16],
+                discriminators: row[19],
+                vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
+             });
+          }
+       }
+       return jsonResponse({ "result": "success", "data": resultRows.reverse() });
+    }
+
     if (action === 'getAllInternation') {
       var sheetInt = ss.getSheetByName("Pacientes internados");
       if (!sheetInt) return jsonResponse({ "result": "success", "data": [] });
@@ -224,7 +282,6 @@ function handleReadActions(action, e, ss, sheet) {
       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 100) });
     }
     
-    // filterHistory omitted
     return jsonResponse({ "result": "success", "data": [] });
 }
 
@@ -346,10 +403,10 @@ function jsonResponse(obj) {
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <div>
                  <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                   <Mail size={20}/> Configuração Backend (v44 - Prontuário)
+                   <Mail size={20}/> Configuração Backend (v45 - Correção Histórico)
                  </h2>
                  <p className="text-xs text-teal-700 mt-1">
-                   Atualização: Padronização do campo "Atendimento" para "Prontuário".
+                   Atualização Crítica: Restaura funcionalidade de busca na aba Histórico.
                  </p>
                </div>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
@@ -360,9 +417,9 @@ function jsonResponse(obj) {
                 <div className="bg-amber-50 border border-amber-200 p-4 rounded text-sm text-amber-900">
                   <strong className="flex items-center gap-2 mb-2"><AlertTriangle size={16}/> IMPORTANTE: ATUALIZE O SCRIPT</strong>
                   <ol className="list-decimal list-inside space-y-2 font-medium mt-2">
-                    <li>Copie o código v44 abaixo.</li>
+                    <li>Copie o código v45 abaixo.</li>
                     <li>No Google Apps Script, substitua TUDO e faça uma <span className="bg-blue-100 px-2 py-0.5 rounded text-blue-800 font-bold">Nova implantação</span>.</li>
-                    <li>Isso atualiza os cabeçalhos das planilhas para "Prontuário".</li>
+                    <li>Isso corrige a busca no histórico que estava retornando vazio.</li>
                     <li className="text-emerald-700 font-bold">Cole a NOVA URL abaixo e salve.</li>
                   </ol>
                 </div>

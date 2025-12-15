@@ -82,6 +82,20 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
     return { total: filtered.length, highRisk: highRiskTotal, protocolCounts, riskCounts, highRiskList };
   }, [reportData, reportMonth]);
 
+  // Helper para formatar data sem timezone shift (YYYY-MM-DD -> DD/MM/YYYY)
+  const formatDateDisplay = (dateStr: string) => {
+      if (!dateStr) return '-';
+      if (dateStr.includes('-')) {
+          const parts = dateStr.split('-');
+          // Se for formato ISO YYYY-MM-DD
+          if (parts[0].length === 4) {
+              const [y, m, d] = parts;
+              return `${d}/${m}/${y}`;
+          }
+      }
+      return dateStr;
+  };
+
   const handleExportHighRiskExcel = () => {
     if (processedReports.highRiskList.length === 0) {
         alert("Não há dados de deterioração para exportar neste mês.");
@@ -98,7 +112,7 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
         'Nº Prontuário': item.medicalRecord,
         'NEWS Score': item.newsScore,
         'Risco': item.riskText,
-        'Data Avaliação': item.evaluationDate,
+        'Data Avaliação': formatDateDisplay(item.evaluationDate), // Usa formatador seguro
         'Hora': item.evaluationTime,
         'Setor': item.sector,
         'Leito': item.bed,
@@ -253,7 +267,8 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
                                            </span>
                                        </td>
                                        <td className="p-3 text-right pr-4 text-slate-500 text-xs font-mono">
-                                           {item.evaluationDate ? new Date(item.evaluationDate).toLocaleDateString('pt-BR') : '-'}
+                                           {/* CORREÇÃO AQUI: Data formatada manualmente */}
+                                           {formatDateDisplay(item.evaluationDate)}
                                        </td>
                                    </tr>
                                ))}

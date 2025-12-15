@@ -104,6 +104,53 @@ const ReportsSection: React.FC<Props> = React.memo(({
     }
   };
 
+  // Helper para formatar data sem timezone shift (YYYY-MM-DD -> DD/MM/YYYY)
+  const formatDateDisplay = (dateStr: string) => {
+      if (!dateStr) return '-';
+      if (dateStr.includes('-')) {
+          const parts = dateStr.split('-');
+          // Se for formato ISO YYYY-MM-DD
+          if (parts[0].length === 4) {
+              const [y, m, d] = parts;
+              return `${d}/${m}/${y}`;
+          }
+      }
+      // Se já estiver formatado ou outro formato, retorna original
+      return dateStr;
+  };
+
+  // Wrapper para corrigir a data na exportação do Excel também
+  const handleExportSafe = () => {
+      const fixedList = processedReports.worsened.map(item => ({
+          ...item,
+          // Força a data correta no objeto antes de enviar pro Excel
+          dateFormatted: formatDateDisplay(item.date)
+      }));
+      
+      // Adaptando a função de exportação para usar a string formatada
+      const adaptedExport = (list: any[], month: string) => {
+          // @ts-ignore
+          if (typeof XLSX === 'undefined') return;
+          const dataToExport = list.map(item => ({
+            'Nome do Paciente': item.name,
+            'Nº Atendimento (AT)': item.id,
+            'Classificação Anterior': `ESI ${item.oldLevel}`,
+            'Classificação Atual': `ESI ${item.newLevel}`,
+            'Data da Reavaliação': item.dateFormatted // Usa a string tratada
+          }));
+          // @ts-ignore
+          const ws = XLSX.utils.json_to_sheet(dataToExport);
+          // @ts-ignore
+          const wb = XLSX.utils.book_new();
+          // @ts-ignore
+          XLSX.utils.book_append_sheet(wb, ws, "Piora Clínica");
+          // @ts-ignore
+          XLSX.writeFile(wb, `Relatorio_Piora_Clinica_${month}.xlsx`);
+      };
+
+      adaptedExport(fixedList, reportMonth);
+  };
+
   return (
     <div className="animate-fade-in pb-10 space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200 gap-4">
@@ -130,7 +177,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
                 <RefreshCw size={16} className={isLoadingReports ? "animate-spin" : ""} /> Sincronizar Dados
               </button>
               <button 
-                onClick={() => handleExportExcel(processedReports.worsened, reportMonth)}
+                onClick={handleExportSafe}
                 disabled={processedReports.worsened.length === 0}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-400 text-white px-4 py-2 rounded font-bold text-sm transition-colors shadow-sm"
               >
@@ -231,7 +278,8 @@ const ReportsSection: React.FC<Props> = React.memo(({
                   <tbody className="divide-y divide-slate-100">
                     {processedReports.worsened.map((item, idx) => (
                         <tr key={idx} className="hover:bg-rose-50/30">
-                          <td className="p-3 text-slate-600">{new Date(item.date).toLocaleDateString('pt-BR')}</td>
+                          {/* CORREÇÃO AQUI: Formatação de data manual */}
+                          <td className="p-3 text-slate-600 font-mono">{formatDateDisplay(item.date)}</td>
                           <td className="p-3 font-medium text-slate-800">{item.name} <span className="text-xs text-slate-400">({item.id})</span></td>
                           <td className="p-3 text-center">
                               <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600">ESI {item.oldLevel}</span>

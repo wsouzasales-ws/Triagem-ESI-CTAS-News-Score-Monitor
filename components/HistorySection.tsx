@@ -49,7 +49,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       } else {
         // Tratamento de erro específico para script desatualizado
         if (data.message && (data.message.includes('Action not supported') || data.message.includes('Unknown Action'))) {
-            setErrorMessage("VERSÃO INCOMPATÍVEL: O Script no Google Sheets está desatualizado. Por favor, vá em Configurações (Engrenagem) > Copie o código v33 > Faça uma NOVA implantação no Apps Script.");
+            setErrorMessage("VERSÃO INCOMPATÍVEL: O Script no Google Sheets está desatualizado. Por favor, vá em Configurações (Engrenagem) > Copie o código v45 > Faça uma NOVA implantação no Apps Script.");
         } else {
             setErrorMessage(data.message || "Erro desconhecido ao buscar dados na planilha.");
         }
