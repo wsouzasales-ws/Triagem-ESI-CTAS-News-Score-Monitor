@@ -150,7 +150,7 @@ const TriageSection: React.FC<Props> = React.memo(({
                 />
             </div>
             <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Nº Atendimento <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Nº <span className="font-black text-slate-900">PRONTUÁRIO</span> <span className="text-red-500">*</span></label>
                 <input 
                   type="text" 
                   className="w-full p-2 border border-slate-600 bg-slate-800 rounded text-white font-medium focus:ring-2 focus:ring-teal-500 outline-none" 
