@@ -19,7 +19,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
   const handleSearch = async () => {
     if (!searchId && !searchDate) {
-      alert("Por favor, preencha o Nº Atendimento ou a Data para buscar.");
+      alert("Por favor, preencha o Nº Prontuário ou a Data para buscar.");
       return;
     }
 
@@ -77,7 +77,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         'Data Avaliação': row.evaluationDate,
         'Hora Avaliação': row.evaluationTime,
         'Paciente': row.name,
-        'Nº Atendimento': row.medicalRecord,
+        'Nº Prontuário': row.medicalRecord,
         'Idade': row.age,
         'Classificação': `ESI ${row.esiLevel}`,
         'PA': row.vitals?.pa,
@@ -152,7 +152,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         </h2>
         <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-slate-600 mb-1">Nº Atendimento (Exato)</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Nº <span className="font-black text-slate-800">PRONTUÁRIO</span> (Exato)</label>
                 <div className="relative">
                     <User className="absolute left-3 top-2.5 text-slate-400" size={18}/>
                     <input 
@@ -231,7 +231,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                     <tr>
                         <th className="p-3 border-b">Data/Hora Sistema</th>
                         <th className="p-3 border-b">Data/Hora Avaliação</th>
-                        <th className="p-3 border-b">Atendimento</th>
+                        <th className="p-3 border-b">Prontuário</th>
                         <th className="p-3 border-b">Paciente</th>
                         <th className="p-3 border-b text-center">Classificação</th>
                         <th className="p-3 border-b">Sinais Vitais</th>
@@ -289,7 +289,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                     <h2 className="text-lg font-bold">Relatório de Histórico de Triagem</h2>
                 </div>
                 <div className="text-right text-sm">
-                    <p><strong>Filtro AT:</strong> {searchId || 'Todos'}</p>
+                    <p><strong>Filtro Prontuário:</strong> {searchId || 'Todos'}</p>
                     <p><strong>Filtro Data:</strong> {searchDate ? new Date(searchDate).toLocaleDateString('pt-BR') : 'Todas'}</p>
                     <p><strong>Emissão:</strong> {new Date().toLocaleString('pt-BR')}</p>
                 </div>
@@ -301,7 +301,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                     <tr className="bg-gray-100 border-b-2 border-black uppercase text-center">
                         <th className="p-2 border border-gray-300 w-24">Data/Hora<br/>Registro</th>
                         <th className="p-2 border border-gray-300 w-24">Data/Hora<br/>Aferição</th>
-                        <th className="p-2 border border-gray-300 w-20">AT</th>
+                        <th className="p-2 border border-gray-300 w-20">Prontuário</th>
                         <th className="p-2 border border-gray-300 w-48 text-left">Paciente</th>
                         <th className="p-2 border border-gray-300 w-16">ESI</th>
                         <th className="p-2 border border-gray-300">Sinais Vitais / Observações</th>

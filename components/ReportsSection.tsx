@@ -222,7 +222,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
                   <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
                     <tr>
                         <th className="p-3">Data</th>
-                        <th className="p-3">Paciente (AT)</th>
+                        <th className="p-3">Paciente (PRONT)</th>
                         <th className="p-3 text-center">Classificação Anterior</th>
                         <th className="p-3 text-center">Nova Classificação</th>
                         <th className="p-3 text-center">Status</th>

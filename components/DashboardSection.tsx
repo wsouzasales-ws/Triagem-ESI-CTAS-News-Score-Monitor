@@ -467,7 +467,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                                     </span>
                                                 )}
                                             </h3>
-                                            <p className="text-xs text-slate-500 font-mono mt-0.5">AT: {row.medicalRecord} • <span className="font-bold text-slate-700">{row.evaluationTime}</span></p>
+                                            <p className="text-xs text-slate-500 font-mono mt-0.5">PRONT: {row.medicalRecord} • <span className="font-bold text-slate-700">{row.evaluationTime}</span></p>
                                         </div>
                                         <div className={`w-12 h-12 flex flex-col items-center justify-center rounded border ${getEsiColor(row.esiLevel)}`}>
                                             <span className="text-[9px] font-bold uppercase leading-none mt-1">ESI</span>
@@ -541,7 +541,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                                     )}
                                                 </h3>
                                                 <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                                    AT: {row.medicalRecord} • <span className="font-bold text-slate-700">{row.evaluationTime}</span>
+                                                    PRONT: {row.medicalRecord} • <span className="font-bold text-slate-700">{row.evaluationTime}</span>
                                                 </p>
                                                 
                                                 {/* LOCALIZAÇÃO (SETOR / LEITO) EM DESTAQUE */}

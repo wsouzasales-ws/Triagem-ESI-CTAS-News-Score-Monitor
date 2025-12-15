@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PatientData, VitalSigns, CtasDiscriminators, TriageResult } from '../types';
 
@@ -39,7 +38,7 @@ export const PrintableReport: React.FC<Props> = ({ patient, vitals, triageResult
           <div className="col-span-2"><span className="font-bold">Nome:</span> {patient.name}</div>
           <div><span className="font-bold">Idade:</span> {patient.age} {patient.ageUnit === 'months' ? 'meses' : 'anos'}</div>
           <div><span className="font-bold">Nascimento:</span> {patient.dob ? new Date(patient.dob).toLocaleDateString('pt-BR') : '-'}</div>
-          <div><span className="font-bold">Atendimento:</span> {patient.medicalRecord}</div>
+          <div><span className="font-bold">Prontuário:</span> {patient.medicalRecord}</div>
           <div><span className="font-bold">Data/Hora Reg:</span> {formatDate(patient.evaluationDate)} às {patient.evaluationTime}</div>
           <div className="col-span-2 flex items-center gap-2">
             <span className="font-bold">Tipo:</span> 
