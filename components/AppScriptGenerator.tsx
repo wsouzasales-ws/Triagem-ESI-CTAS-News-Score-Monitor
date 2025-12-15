@@ -11,7 +11,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [copied, setCopied] = useState(false);
 
-  // Script v43: Flush e Atomicidade para Alta Concorrência
+  // Script v44: Padronização para Nº Prontuário nos cabeçalhos
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -76,7 +76,7 @@ function setupStructure() {
   if (sheetPatients.getName() !== "Pacientes") sheetPatients.setName("Pacientes");
   
   var headersPatients = [
-      "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Atendimento", 
+      "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Reavaliação?", "Idade", "Queixa", "PA", "FC", "FR", "Temp", "SpO2", "GCS", "Dor", 
       "ESI Level", "Classificação", "Tempo Alvo", "Justificativa", "Discriminadores", "Data Nascimento", "Usuário Resp."
   ];
@@ -95,14 +95,14 @@ function setupStructure() {
   var sheetInternation = ss.getSheetByName("Pacientes internados");
   if (!sheetInternation) sheetInternation = ss.insertSheet("Pacientes internados");
   var headersInternation = [
-      "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Atendimento", 
+      "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Data Nascimento", "Setor", "Leito", "Reavaliação?",
       "PAS", "PAD", "FC", "FR", "Temp", "SpO2", "Consciencia", "O2 Suplementar", "Dor",
       "Obs", "NEWS Score", "Risco NEWS", "Usuário Resp."
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura Organizada (v43): Rastreabilidade + Flush.";
+  return "Estrutura Organizada (v44): Headers Prontuário.";
 }
 
 function doGet(e) {
@@ -115,13 +115,12 @@ function doGet(e) {
        if (lock.tryLock(5000)) { 
           try { setupStructure(); } finally { lock.releaseLock(); }
        }
-       return jsonResponse({ "result": "success", "message": "Script v43 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v44 Online" });
     }
 
     var sheet = ss.getSheets()[0];
 
     if (action === 'search' || action === 'searchInternation' || action === 'getAll' || action === 'getAllInternation' || action === 'filterHistory') {
-      // Leituras não precisam de Lock rigoroso, aumenta performance de leitura simultanea
       return handleReadActions(action, e, ss, sheet);
     }
     
@@ -225,13 +224,12 @@ function handleReadActions(action, e, ss, sheet) {
       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 100) });
     }
     
-    // filterHistory logic (omitted for brevity, same as previous)
+    // filterHistory omitted
     return jsonResponse({ "result": "success", "data": [] });
 }
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  // Aguarda até 30s por uma vaga de escrita
   lock.waitLock(30000); 
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -254,7 +252,7 @@ function doPost(e) {
           getSafe(data, 'news.score', ''), getSafe(data, 'news.riskText', ''), getSafe(data, 'user', 'Sistema')
        ];
        sheetInternation.appendRow(rowData);
-       SpreadsheetApp.flush(); // FORÇA ESCRITA IMEDIATA
+       SpreadsheetApp.flush(); 
        return jsonResponse({ "result": "success" });
     }
 
@@ -272,7 +270,7 @@ function doPost(e) {
         getSafe(data, 'patient.dob', ''), getSafe(data, 'user', 'Sistema')
       ];
       sheet.appendRow(rowData);
-      SpreadsheetApp.flush(); // FORÇA ESCRITA IMEDIATA
+      SpreadsheetApp.flush(); 
       return jsonResponse({ "result": "success" });
     }
     
@@ -348,10 +346,10 @@ function jsonResponse(obj) {
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <div>
                  <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                   <Mail size={20}/> Configuração Backend (v43 - Concorrência)
+                   <Mail size={20}/> Configuração Backend (v44 - Prontuário)
                  </h2>
                  <p className="text-xs text-teal-700 mt-1">
-                   Atualização: Flush imediato e tratamento de Locks para múltiplos usuários.
+                   Atualização: Padronização do campo "Atendimento" para "Prontuário".
                  </p>
                </div>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
@@ -362,9 +360,9 @@ function jsonResponse(obj) {
                 <div className="bg-amber-50 border border-amber-200 p-4 rounded text-sm text-amber-900">
                   <strong className="flex items-center gap-2 mb-2"><AlertTriangle size={16}/> IMPORTANTE: ATUALIZE O SCRIPT</strong>
                   <ol className="list-decimal list-inside space-y-2 font-medium mt-2">
-                    <li>Copie o código v43 abaixo.</li>
+                    <li>Copie o código v44 abaixo.</li>
                     <li>No Google Apps Script, substitua TUDO e faça uma <span className="bg-blue-100 px-2 py-0.5 rounded text-blue-800 font-bold">Nova implantação</span>.</li>
-                    <li>Essa versão previne perda de dados quando vários usuários salvam ao mesmo tempo.</li>
+                    <li>Isso atualiza os cabeçalhos das planilhas para "Prontuário".</li>
                     <li className="text-emerald-700 font-bold">Cole a NOVA URL abaixo e salve.</li>
                   </ol>
                 </div>
