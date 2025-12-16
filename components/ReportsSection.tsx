@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileSpreadsheet, RefreshCw, FileText, Brain, Flame, Heart, Zap, TrendingDown } from 'lucide-react';
+import { FileSpreadsheet, RefreshCw, FileText, Brain, Flame, Heart, Zap, TrendingDown, Clock } from 'lucide-react';
 import { SheetRowData } from '../types';
 
 interface Props {
@@ -17,6 +17,46 @@ const ReportsSection: React.FC<Props> = React.memo(({
 }) => {
   const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
+  // Helper para criar objeto Date a partir de strings de data (DD/MM/YYYY ou YYYY-MM-DD) e hora (HH:mm)
+  const parseRowDateTime = (dateStr: string, timeStr: string): Date | null => {
+    try {
+        if (!dateStr) return null;
+        let year = 0, month = 0, day = 0;
+        
+        if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            day = parseInt(parts[0]);
+            month = parseInt(parts[1]) - 1;
+            year = parseInt(parts[2]);
+        } else if (dateStr.includes('-')) {
+            const parts = dateStr.split('-');
+            if (parts[0].length === 4) {
+               year = parseInt(parts[0]);
+               month = parseInt(parts[1]) - 1;
+               day = parseInt(parts[2]);
+            } else {
+               day = parseInt(parts[0]);
+               month = parseInt(parts[1]) - 1;
+               year = parseInt(parts[2]);
+            }
+        }
+        
+        let hour = 0, min = 0;
+        if (timeStr) {
+            const tParts = timeStr.split(':');
+            if (tParts.length >= 2) {
+                hour = parseInt(tParts[0]);
+                min = parseInt(tParts[1]);
+            }
+        }
+
+        if (year > 0) return new Date(year, month, day, hour, min);
+        return null;
+    } catch (e) {
+        return null;
+    }
+  };
+
   const processedReports = useMemo(() => {
     if (!reportData || !Array.isArray(reportData) || reportData.length === 0) {
         return { total: 0, reevaluations: 0, worsened: [], esiCounts: [0,0,0,0,0], protocolCounts: { avc: 0, sepse: 0, dorToracica: 0, dorIntensa: 0 } };
@@ -31,7 +71,8 @@ const ReportsSection: React.FC<Props> = React.memo(({
 
     const filtered = reportData.filter(row => {
         const dateStr = row.evaluationDate ? String(row.evaluationDate) : '';
-        return dateStr.startsWith(reportMonth);
+        // Filtro visual básico pelo mês selecionado
+        return dateStr.startsWith(reportMonth) || (dateStr.includes('/') && dateStr.split('/')[2] + '-' + dateStr.split('/')[1] === reportMonth);
     });
 
     const grouped: Record<string, SheetRowData[]> = {};
@@ -39,8 +80,9 @@ const ReportsSection: React.FC<Props> = React.memo(({
 
     filtered.forEach(row => {
         if (row.medicalRecord) {
-            if (!grouped[row.medicalRecord]) grouped[row.medicalRecord] = [];
-            grouped[row.medicalRecord].push(row);
+            const cleanId = String(row.medicalRecord).trim();
+            if (!grouped[cleanId]) grouped[cleanId] = [];
+            grouped[cleanId].push(row);
         }
 
         const disc = (row.discriminators || '').toLowerCase();
@@ -50,14 +92,16 @@ const ReportsSection: React.FC<Props> = React.memo(({
         if (disc.includes('dor severa') || disc.includes('dor intensa') || disc.includes('dor >')) protocolCounts.dorIntensa++;
     });
 
-    const worsenedList: { id: string, name: string, oldLevel: number, newLevel: number, date: string }[] = [];
+    const worsenedList: { id: string, name: string, oldLevel: number, newLevel: number, date: string, timeDiff: string }[] = [];
     
     Object.values(grouped).forEach(group => {
        if (group.length > 1) {
+          // Ordena cronologicamente dentro do grupo
           group.sort((a, b) => {
-             const tA = (a.evaluationDate || '') + (a.evaluationTime || '');
-             const tB = (b.evaluationDate || '') + (b.evaluationTime || '');
-             return tA.localeCompare(tB);
+             const dA = parseRowDateTime(a.evaluationDate, a.evaluationTime);
+             const dB = parseRowDateTime(b.evaluationDate, b.evaluationTime);
+             if (!dA || !dB) return 0;
+             return dA.getTime() - dB.getTime();
           });
 
           for (let i = 1; i < group.length; i++) {
@@ -66,22 +110,36 @@ const ReportsSection: React.FC<Props> = React.memo(({
              
              const prevLevel = getEsi(prev.esiLevel);
              const currLevel = getEsi(curr.esiLevel);
-             const currDate = curr.evaluationDate ? String(curr.evaluationDate) : '';
+             
+             // LÓGICA DE TEMPO (EPISÓDIO CLÍNICO)
+             const datePrev = parseRowDateTime(prev.evaluationDate, prev.evaluationTime);
+             const dateCurr = parseRowDateTime(curr.evaluationDate, curr.evaluationTime);
+             
+             let hoursDiff = 999;
+             if (datePrev && dateCurr) {
+                 const diffMs = dateCurr.getTime() - datePrev.getTime();
+                 hoursDiff = diffMs / (1000 * 60 * 60);
+             }
 
-             if (currLevel > 0 && prevLevel > 0 && currLevel < prevLevel && currDate.startsWith(reportMonth)) {
+             // Critérios para Piora Clínica:
+             // 1. Ambos tem ESI válido
+             // 2. ESI Atual é menor (mais grave) que o anterior (Ex: 3 -> 2)
+             // 3. Diferença de tempo <= 24 HORAS (Define o mesmo episódio de atendimento)
+             if (currLevel > 0 && prevLevel > 0 && currLevel < prevLevel && hoursDiff <= 24) {
                 worsenedList.push({
                    id: curr.medicalRecord,
                    name: curr.name,
                    oldLevel: prevLevel,
                    newLevel: currLevel,
-                   date: currDate
+                   date: curr.evaluationDate,
+                   timeDiff: hoursDiff.toFixed(1)
                 });
              }
           }
        }
     });
 
-    const reevalCount = filtered.filter(r => r.isReevaluation === 'SIM').length;
+    const reevalCount = filtered.filter(r => String(r.isReevaluation).toUpperCase() === 'SIM').length;
     const esiCounts = [0,0,0,0,0];
     
     filtered.forEach(r => {
@@ -104,30 +162,24 @@ const ReportsSection: React.FC<Props> = React.memo(({
     }
   };
 
-  // Helper para formatar data sem timezone shift (YYYY-MM-DD -> DD/MM/YYYY)
   const formatDateDisplay = (dateStr: string) => {
       if (!dateStr) return '-';
       if (dateStr.includes('-')) {
           const parts = dateStr.split('-');
-          // Se for formato ISO YYYY-MM-DD
           if (parts[0].length === 4) {
               const [y, m, d] = parts;
               return `${d}/${m}/${y}`;
           }
       }
-      // Se já estiver formatado ou outro formato, retorna original
       return dateStr;
   };
 
-  // Wrapper para corrigir a data na exportação do Excel também
   const handleExportSafe = () => {
       const fixedList = processedReports.worsened.map(item => ({
           ...item,
-          // Força a data correta no objeto antes de enviar pro Excel
           dateFormatted: formatDateDisplay(item.date)
       }));
       
-      // Adaptando a função de exportação para usar a string formatada
       const adaptedExport = (list: any[], month: string) => {
           // @ts-ignore
           if (typeof XLSX === 'undefined') return;
@@ -136,7 +188,8 @@ const ReportsSection: React.FC<Props> = React.memo(({
             'Nº Atendimento (AT)': item.id,
             'Classificação Anterior': `ESI ${item.oldLevel}`,
             'Classificação Atual': `ESI ${item.newLevel}`,
-            'Data da Reavaliação': item.dateFormatted // Usa a string tratada
+            'Data da Reavaliação': item.dateFormatted,
+            'Intervalo (h)': item.timeDiff
           }));
           // @ts-ignore
           const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -261,9 +314,12 @@ const ReportsSection: React.FC<Props> = React.memo(({
               <h3 className="text-rose-800 font-bold text-sm flex items-center gap-2">
                   <TrendingDown size={16}/> Monitoramento de Piora Clínica (Reavaliações)
               </h3>
+              <div className="text-[10px] text-rose-600 font-bold border border-rose-200 bg-white px-2 py-1 rounded">
+                 Janela de Episódio: 24h
+              </div>
             </div>
             {processedReports.worsened.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 italic text-sm">Nenhum caso de piora de classificação registrado neste mês.</div>
+              <div className="p-8 text-center text-slate-400 italic text-sm">Nenhum caso de piora de classificação registrado neste mês (na mesma janela de 24h).</div>
             ) : (
               <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
@@ -272,13 +328,13 @@ const ReportsSection: React.FC<Props> = React.memo(({
                         <th className="p-3">Paciente (PRONT)</th>
                         <th className="p-3 text-center">Classificação Anterior</th>
                         <th className="p-3 text-center">Nova Classificação</th>
+                        <th className="p-3 text-center" title="Tempo decorrido entre as avaliações">Intervalo (h)</th>
                         <th className="p-3 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {processedReports.worsened.map((item, idx) => (
                         <tr key={idx} className="hover:bg-rose-50/30">
-                          {/* CORREÇÃO AQUI: Formatação de data manual */}
                           <td className="p-3 text-slate-600 font-mono">{formatDateDisplay(item.date)}</td>
                           <td className="p-3 font-medium text-slate-800">{item.name} <span className="text-xs text-slate-400">({item.id})</span></td>
                           <td className="p-3 text-center">
@@ -286,6 +342,11 @@ const ReportsSection: React.FC<Props> = React.memo(({
                           </td>
                           <td className="p-3 text-center">
                               <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold text-white ${getEsiColor(item.newLevel)}`}>ESI {item.newLevel}</span>
+                          </td>
+                          <td className="p-3 text-center text-xs font-mono text-slate-500">
+                              <div className="flex items-center justify-center gap-1">
+                                <Clock size={12}/> {item.timeDiff}h
+                              </div>
                           </td>
                           <td className="p-3 text-center text-rose-600 font-bold text-xs flex justify-center items-center gap-1">
                               <TrendingDown size={14} /> PIORA

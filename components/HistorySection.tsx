@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, FileText, Printer, CalendarDays, User, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
 import { SheetRowData } from '../types';
+import { fetchWithRetry } from '../utils/api';
 
 interface Props {
   scriptUrl: string;
@@ -37,8 +38,8 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         _: String(timestamp)
       });
 
-      const response = await fetch(`${scriptUrl}?${queryParams.toString()}`);
-      const data = await response.json();
+      // Uso de fetchWithRetry
+      const data = await fetchWithRetry(`${scriptUrl}?${queryParams.toString()}`, { method: 'GET' });
 
       if (data.result === 'success') {
         if (Array.isArray(data.data)) {
@@ -56,7 +57,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       }
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
-      setErrorMessage("Erro de Conexão. Verifique se a URL do Script está correta e acessível.");
+      setErrorMessage("Erro de Conexão. Verifique a URL do Script e se está configurado como 'Qualquer Pessoa'.");
     } finally {
       setIsLoading(false);
       setSearched(true);
@@ -132,6 +133,16 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       case '5': return 'bg-blue-500 text-white';
       default: return 'bg-gray-200 text-gray-700';
     }
+  };
+
+  // Helper para formatar data do input type="date" (YYYY-MM-DD) para DD/MM/YYYY sem conversão de timezone
+  const formatDateRaw = (dateString: string) => {
+     if (!dateString) return 'Todas';
+     const parts = dateString.split('-'); // [2025, 12, 15]
+     if (parts.length === 3) {
+         return `${parts[2]}/${parts[1]}/${parts[0]}`;
+     }
+     return dateString;
   };
 
   return (
@@ -233,6 +244,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                         <th className="p-3 border-b">Data/Hora Avaliação</th>
                         <th className="p-3 border-b">Prontuário</th>
                         <th className="p-3 border-b">Paciente</th>
+                        <th className="p-3 border-b">Queixa / Obs</th> {/* Nova Coluna */}
                         <th className="p-3 border-b text-center">Classificação</th>
                         <th className="p-3 border-b">Sinais Vitais</th>
                     </tr>
@@ -243,9 +255,12 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                             <td className="p-3 text-slate-500 font-mono text-xs">{row.systemTimestamp}</td>
                             <td className="p-3 font-medium text-slate-700">{row.evaluationDate} {row.evaluationTime}</td>
                             <td className="p-3 font-bold text-slate-700">{row.medicalRecord}</td>
-                            <td className="p-3">
-                                <div className="font-bold">{row.name}</div>
-                                <div className="text-xs text-slate-400 truncate max-w-[200px]">{row.complaint}</div>
+                            <td className="p-3 font-bold text-slate-700">
+                                {row.name}
+                                <span className="block text-[10px] font-normal text-slate-400">{row.age}</span>
+                            </td>
+                            <td className="p-3 text-xs text-slate-500 max-w-[200px] truncate" title={row.complaint}>
+                                {row.complaint}
                             </td>
                             <td className="p-3 text-center">
                                 <span className={`px-2 py-1 rounded text-xs font-bold ${getEsiColor(row.esiLevel)}`}>
@@ -266,7 +281,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                     )) : (
                         searched && (
                             <tr>
-                                <td colSpan={6} className="p-8 text-center text-slate-400">
+                                <td colSpan={7} className="p-8 text-center text-slate-400">
                                     <AlertCircle className="inline-block mb-2" size={24}/>
                                     <p>Nenhum registro encontrado para os filtros informados.</p>
                                 </td>
@@ -290,7 +305,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                 </div>
                 <div className="text-right text-sm">
                     <p><strong>Filtro Prontuário:</strong> {searchId || 'Todos'}</p>
-                    <p><strong>Filtro Data:</strong> {searchDate ? new Date(searchDate).toLocaleDateString('pt-BR') : 'Todas'}</p>
+                    <p><strong>Filtro Data:</strong> {formatDateRaw(searchDate)}</p>
                     <p><strong>Emissão:</strong> {new Date().toLocaleString('pt-BR')}</p>
                 </div>
             </div>
@@ -320,7 +335,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                                 <td className="p-2 border-r border-gray-300 text-center font-bold">{row.medicalRecord}</td>
                                 <td className="p-2 border-r border-gray-300 text-left">
                                     <span className="font-bold block uppercase truncate">{row.name}</span>
-                                    <span className="text-[10px] italic">{row.age} anos</span>
+                                    <span className="text-[10px] italic">{row.age}</span>
                                 </td>
                                 <td className="p-2 border-r border-gray-300 text-center font-black text-sm">
                                     {String(row.esiLevel).replace("'","")}

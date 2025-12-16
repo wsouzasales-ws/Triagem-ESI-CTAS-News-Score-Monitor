@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { Copy, Settings, Check, AlertTriangle, TableProperties, Database, Mail, Play } from 'lucide-react';
+import { Copy, Settings, Check, AlertTriangle, Mail, RotateCcw, Wifi, WifiOff, ExternalLink } from 'lucide-react';
+import { fetchWithRetry } from '../utils/api';
 
 interface Props {
   currentUrl: string;
   onSaveUrl: (url: string) => void;
 }
 
+// URL da Imagem v53 (Garantida como fallback)
+const DEFAULT_HARDCODED_URL = "https://script.google.com/macros/s/AKfycbypWWb0HcWJx4e52LEGAsK-zQJhC6TOofvZKS8FEGGdfGccZQUXKo8GudbUQFW7QTY4/exec";
+
 export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [copied, setCopied] = useState(false);
+  
+  // Estados do Teste de Conexão
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
 
-  // Script v45: Correção da busca no Histórico (filterHistory)
+  // Script v45 (Mantido idêntico para garantir compatibilidade)
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -387,6 +395,44 @@ function jsonResponse(obj) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleTestConnection = async () => {
+      setTestStatus('testing');
+      setTestMessage('Testando conexão...');
+      const trimmedUrl = urlInput.trim();
+
+      if (!trimmedUrl.includes('script.google.com')) {
+          setTestStatus('error');
+          setTestMessage('URL inválida. Deve ser um script do Google.');
+          return;
+      }
+
+      try {
+          const timestamp = new Date().getTime();
+          const response = await fetchWithRetry(`${trimmedUrl}?action=search&medicalRecord=TEST_PING_${timestamp}`, { method: 'GET' });
+          
+          if (response.result === 'not_found' || response.result === 'found') {
+              setTestStatus('success');
+              setTestMessage('CONEXÃO SUCESSO! A URL está correta e acessível.');
+          } else {
+              setTestStatus('error');
+              setTestMessage(`Erro de resposta: ${response.message || 'Desconhecido'}`);
+          }
+      } catch (e: any) {
+          setTestStatus('error');
+          setTestMessage(`FALHA: ${e.message || 'Erro de Rede/CORS'}. Verifique se a implantação está como "QUALQUER PESSOA".`);
+      }
+  };
+
+  const handleResetUrl = () => {
+      const trimmedDefault = DEFAULT_HARDCODED_URL.trim();
+      setUrlInput(trimmedDefault);
+      onSaveUrl(trimmedDefault);
+      localStorage.setItem('appScriptUrl', trimmedDefault);
+      alert('URL restaurada para o padrão (v53). Conexão deve voltar a funcionar.');
+      setIsOpen(false);
+      window.location.reload(); 
+  };
+
   return (
     <>
       <button 
@@ -399,14 +445,14 @@ function jsonResponse(obj) {
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <div>
                  <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                   <Mail size={20}/> Configuração Backend (v45 - Correção Histórico)
+                   <Mail size={20}/> Configuração Backend (v45)
                  </h2>
                  <p className="text-xs text-teal-700 mt-1">
-                   Atualização Crítica: Restaura funcionalidade de busca na aba Histórico.
+                   Atualização: Habilita busca por data e número de atendimento.
                  </p>
                </div>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
@@ -414,13 +460,21 @@ function jsonResponse(obj) {
              
              <div className="p-6 overflow-y-auto space-y-6">
                 
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded text-sm text-amber-900">
-                  <strong className="flex items-center gap-2 mb-2"><AlertTriangle size={16}/> IMPORTANTE: ATUALIZE O SCRIPT</strong>
-                  <ol className="list-decimal list-inside space-y-2 font-medium mt-2">
-                    <li>Copie o código v45 abaixo.</li>
-                    <li>No Google Apps Script, substitua TUDO e faça uma <span className="bg-blue-100 px-2 py-0.5 rounded text-blue-800 font-bold">Nova implantação</span>.</li>
-                    <li>Isso corrige a busca no histórico que estava retornando vazio.</li>
-                    <li className="text-emerald-700 font-bold">Cole a NOVA URL abaixo e salve.</li>
+                {/* INSTRUÇÕES CRÍTICAS SOBRE PERMISSÃO */}
+                <div className="bg-rose-50 border border-rose-200 p-4 rounded text-sm text-rose-900">
+                  <strong className="flex items-center gap-2 mb-2 text-rose-700"><AlertTriangle size={18}/> MOTIVO DO ERRO "FAILED TO FETCH"</strong>
+                  <p className="mb-2">Se você está vendo erros de rede, é 99% de certeza que a implantação está incorreta.</p>
+                  <p className="font-bold">SIGA ESTES PASSOS EXATOS NO GOOGLE APPS SCRIPT:</p>
+                  <ol className="list-decimal list-inside space-y-2 font-medium mt-2 bg-white p-3 rounded border border-rose-100">
+                    <li>Copie o código abaixo.</li>
+                    <li>No Editor, clique em <strong>Implantar (Deploy)</strong> &gt; <strong>Nova implantação</strong>.</li>
+                    <li><span className="text-blue-600">Descrição:</span> Coloque "v54".</li>
+                    <li><span className="text-blue-600">Executar como:</span> <strong>Eu (seu e-mail)</strong>.</li>
+                    <li className="bg-yellow-200 px-1 py-0.5 rounded text-black font-black border border-yellow-400">
+                        Quem pode acessar: QUALQUER PESSOA (ANYONE)
+                    </li>
+                    <li className="text-xs text-slate-500 ml-5">Não use "Conta Google" nem "Apenas Eu". Tem que ser "Qualquer Pessoa".</li>
+                    <li>Clique em <strong>Implantar</strong> e copie a <strong>URL do App da Web</strong>.</li>
                   </ol>
                 </div>
 
@@ -435,25 +489,68 @@ function jsonResponse(obj) {
                    <pre>{scriptCode}</pre>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-sm font-bold text-gray-700">Nova URL da Implantação:</label>
-                  <input 
-                    type="text" 
-                    value={urlInput} 
-                    onChange={(e) => setUrlInput(e.target.value)} 
-                    className="w-full p-2 border rounded focus:ring-2 focus:ring-teal-500 outline-none font-mono text-xs text-slate-600 bg-gray-50" 
-                    placeholder="https://script.google.com/macros/s/..."
-                  />
+                <div className="space-y-3">
+                  <label className="text-sm font-bold text-gray-700">Nova URL da Implantação (Web App URL):</label>
+                  <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={urlInput} 
+                        onChange={(e) => {
+                            setUrlInput(e.target.value);
+                            setTestStatus('idle'); // Reseta teste ao digitar
+                            setTestMessage('');
+                        }} 
+                        className="w-full p-2 border rounded focus:ring-2 focus:ring-teal-500 outline-none font-mono text-xs text-slate-600 bg-gray-50" 
+                        placeholder="https://script.google.com/macros/s/..."
+                      />
+                      <button 
+                        onClick={handleTestConnection}
+                        disabled={testStatus === 'testing'}
+                        className={`px-4 py-2 rounded font-bold text-xs flex items-center gap-2 border transition-colors whitespace-nowrap ${
+                             testStatus === 'success' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 
+                             testStatus === 'error' ? 'bg-rose-100 text-rose-800 border-rose-300' :
+                             'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                        }`}
+                      >
+                         {testStatus === 'testing' ? <div className="animate-spin w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full"></div> : 
+                          testStatus === 'success' ? <Wifi size={16}/> : 
+                          testStatus === 'error' ? <WifiOff size={16}/> : 
+                          <ExternalLink size={16}/>}
+                         {testStatus === 'testing' ? 'Testando...' : 'Testar Conexão'}
+                      </button>
+                  </div>
+                  
+                  {testMessage && (
+                      <div className={`text-xs font-bold p-2 rounded ${testStatus === 'success' ? 'text-emerald-700 bg-emerald-50' : testStatus === 'error' ? 'text-rose-700 bg-rose-50' : 'text-slate-500'}`}>
+                          {testMessage}
+                      </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400">Verifique se não há espaços no final.</p>
                 </div>
              </div>
-             <div className="p-4 border-t flex justify-end gap-2 bg-gray-50 rounded-b-lg">
-                <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancelar</button>
+             <div className="p-4 border-t flex justify-between gap-2 bg-gray-50 rounded-b-lg">
                 <button 
-                  onClick={() => { onSaveUrl(urlInput); localStorage.setItem('appScriptUrl', urlInput); setIsOpen(false); }} 
-                  className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 font-medium shadow-sm"
+                  onClick={handleResetUrl}
+                  className="px-4 py-2 text-rose-600 border border-rose-200 hover:bg-rose-50 rounded font-bold text-xs flex items-center gap-2"
+                  title="Usa a URL da Imagem v53"
                 >
-                  Salvar Nova Configuração
+                    <RotateCcw size={14}/> Restaurar URL da Imagem (v53)
                 </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancelar</button>
+                    <button 
+                    onClick={() => { 
+                        const trimmed = urlInput.trim();
+                        onSaveUrl(trimmed); 
+                        localStorage.setItem('appScriptUrl', trimmed); 
+                        setIsOpen(false); 
+                    }} 
+                    className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 font-medium shadow-sm"
+                    >
+                    Salvar Configuração
+                    </button>
+                </div>
              </div>
           </div>
         </div>

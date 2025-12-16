@@ -124,8 +124,10 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
 
      try {
         const timestamp = new Date().getTime();
-        const response = await fetch(`${scriptUrl}?action=searchInternation&medicalRecord=${encodeURIComponent(patient.medicalRecord)}&_=${timestamp}`);
-        const data = await response.json();
+        // Uso de fetchWithRetry
+        const data = await fetchWithRetry(`${scriptUrl}?action=searchInternation&medicalRecord=${encodeURIComponent(patient.medicalRecord)}&_=${timestamp}`, {
+            method: 'GET'
+        });
 
         setIsSyncing(false);
 

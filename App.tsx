@@ -26,7 +26,9 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<{name: string, email: string} | null>(null);
 
-  const [scriptUrl, setScriptUrl] = useState<string>(() => localStorage.getItem('appScriptUrl') || DEFAULT_SCRIPT_URL);
+  // Garante URL sem espaços
+  const [scriptUrl, setScriptUrl] = useState<string>(() => (localStorage.getItem('appScriptUrl') || DEFAULT_SCRIPT_URL).trim());
+  
   const [activeTab, setActiveTab] = useState<'triage' | 'internation' | 'reports' | 'internationReports' | 'dashboard' | 'history'>('triage');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,15 +133,10 @@ const App: React.FC = () => {
 
     try {
       const timestamp = new Date().getTime();
-      const response = await fetch(`${scriptUrl}?action=search&medicalRecord=${encodeURIComponent(recordId)}&_=${timestamp}`, {
+      // Uso de fetchWithRetry para maior robustez
+      const data = await fetchWithRetry(`${scriptUrl.trim()}?action=search&medicalRecord=${encodeURIComponent(recordId)}&_=${timestamp}`, {
         method: 'GET'
       });
-      
-      if (!response.ok) {
-        throw new Error(`Erro HTTP: ${response.status}`);
-      }
-
-      const data = await response.json();
 
       if (data.result === 'found') {
           setPatientHistory(data.history);
@@ -179,7 +176,7 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
-      setNotification({ msg: 'Erro na busca. Verifique a URL e se o script foi implantado.', type: 'error' });
+      setNotification({ msg: 'Erro na busca. Verifique conexão e permissões do Script.', type: 'error' });
     } finally {
         setIsSearchingHistory(false);
         setTimeout(() => setNotification(null), 3000);
@@ -190,8 +187,9 @@ const App: React.FC = () => {
   const handleSyncFromSheet = useCallback(() => {
     setIsLoadingReports(true);
     const timestamp = new Date().getTime();
-    fetch(`${scriptUrl}?action=getAll&_=${timestamp}`, { method: 'GET' })
-    .then(res => res.json())
+    
+    // Uso de fetchWithRetry
+    fetchWithRetry(`${scriptUrl.trim()}?action=getAll&_=${timestamp}`, { method: 'GET' })
     .then(data => {
         if (data.result === 'success' && Array.isArray(data.data)) {
             setReportData(data.data);
@@ -203,7 +201,8 @@ const App: React.FC = () => {
     .catch(err => {
         console.error("Sync Error:", err);
         setReportData([]);
-        setNotification({ msg: 'Erro de Sincronização. Verifique a Conexão.', type: 'error' });
+        const errMsg = err.message || 'Erro desconhecido';
+        setNotification({ msg: `Erro de Sincronização: ${errMsg}`, type: 'error' });
     })
     .finally(() => setIsLoadingReports(false));
   }, [scriptUrl]);
@@ -211,8 +210,9 @@ const App: React.FC = () => {
   // Sincroniza dados da Internação (Aba Pacientes internados) - NOVO
   const handleSyncInternation = useCallback(() => {
     const timestamp = new Date().getTime();
-    fetch(`${scriptUrl}?action=getAllInternation&_=${timestamp}`, { method: 'GET' })
-    .then(res => res.json())
+    
+    // Uso de fetchWithRetry
+    fetchWithRetry(`${scriptUrl.trim()}?action=getAllInternation&_=${timestamp}`, { method: 'GET' })
     .then(data => {
         if (data.result === 'success' && Array.isArray(data.data)) {
             setInternationReportData(data.data);
@@ -310,7 +310,7 @@ const App: React.FC = () => {
 
     try {
       // USO DA NOVA FUNÇÃO fetchWithRetry (SEM NO-CORS)
-      await fetchWithRetry(scriptUrl, {
+      await fetchWithRetry(scriptUrl.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(safePayload)
@@ -393,7 +393,7 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-100">Carregando Login...</div>}>
-        <Login onLogin={handleLogin} scriptUrl={scriptUrl} />
+        <Login onLogin={handleLogin} scriptUrl={scriptUrl.trim()} />
       </React.Suspense>
     );
   }
@@ -499,7 +499,7 @@ const App: React.FC = () => {
             {/* RENDERIZAÇÃO INTERNAÇÃO */}
             {activeTab === 'internation' && (
                <InternationSection 
-                  scriptUrl={scriptUrl} 
+                  scriptUrl={scriptUrl.trim()} 
                   handleSyncFromSheet={handleSyncInternation} // Usa o sync específico
                   currentUser={currentUser} // Passa usuário logado para rastreabilidade
                />
@@ -535,7 +535,7 @@ const App: React.FC = () => {
 
             {activeTab === 'history' && (
               <HistorySection 
-                scriptUrl={scriptUrl} 
+                scriptUrl={scriptUrl.trim()} 
               />
             )}
           </React.Suspense>
@@ -543,7 +543,7 @@ const App: React.FC = () => {
 
         {currentUser?.email?.toLowerCase() === 'wanderson.sales@redemedical.com.br' && (
            <React.Suspense fallback={null}>
-             <AppScriptGenerator currentUrl={scriptUrl} onSaveUrl={(url) => setScriptUrl(url)} />
+             <AppScriptGenerator currentUrl={scriptUrl.trim()} onSaveUrl={(url) => setScriptUrl(url.trim())} />
            </React.Suspense>
         )}
 
