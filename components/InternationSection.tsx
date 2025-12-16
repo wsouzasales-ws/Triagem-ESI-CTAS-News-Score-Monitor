@@ -254,7 +254,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
   const painConfig = currentPainLevel !== null ? getPainConfig(currentPainLevel) : null;
   const PainIcon = painConfig ? painConfig.icon : Smile;
 
-  const SymptomCheck = ({ id, label }: { id: string, label: string }) => (
+  const SymptomCheck: React.FC<{ id: string; label: string }> = ({ id, label }) => (
     <div 
         onClick={() => toggleSymptom(id)}
         className="flex items-start gap-2 mb-2 cursor-pointer group select-none"
