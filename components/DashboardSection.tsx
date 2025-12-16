@@ -134,6 +134,11 @@ const DashboardSection: React.FC<Props> = React.memo(({
      const standardWindow = 12 * msInHour; 
      const extendedWindow = 24 * msInHour;
 
+     // TIMEZONE FIX: Tolerância para fusos horários diferentes (Cuiabá é -1h em relação a Brasília)
+     // Permitimos registros que pareçam estar até 5 horas no "futuro" para compensar a diferença
+     // entre o relógio do servidor Google (GMT-3) e o cliente (GMT-4 ou outros).
+     const TIMEZONE_BUFFER = 5 * msInHour; 
+
      const validTriageRows = reportData.map(row => {
         const parsedSystem = row.systemTimestamp ? parseDateRobust(row.systemTimestamp) : null;
         const parsedManual = parseDateRobust(row.evaluationDate, row.evaluationTime);
@@ -153,17 +158,31 @@ const DashboardSection: React.FC<Props> = React.memo(({
         return b._parsedDate.getTime() - a._parsedDate.getTime();
      };
 
-     // Filter Logic
+     // Filter Logic (Com buffer de Timezone aplicado)
      // @ts-ignore
-     let triageFiltered = validTriageRows.filter(r => (now.getTime() - r._parsedDate.getTime()) <= standardWindow && (now.getTime() - r._parsedDate.getTime()) >= 0);
+     let triageFiltered = validTriageRows.filter(r => {
+        // @ts-ignore
+        const diff = now.getTime() - r._parsedDate.getTime();
+        return diff <= standardWindow && diff >= -TIMEZONE_BUFFER;
+     });
+     
      // @ts-ignore
-     let internationFiltered = validInternationRows.filter(r => (now.getTime() - r._parsedDate.getTime()) <= standardWindow && (now.getTime() - r._parsedDate.getTime()) >= 0);
+     let internationFiltered = validInternationRows.filter(r => {
+        // @ts-ignore
+        const diff = now.getTime() - r._parsedDate.getTime();
+        return diff <= standardWindow && diff >= -TIMEZONE_BUFFER;
+     });
 
      let extended = false;
 
      if (triageFiltered.length === 0 && validTriageRows.length > 0) {
         // @ts-ignore
-        const ext = validTriageRows.filter(r => (now.getTime() - r._parsedDate.getTime()) <= extendedWindow);
+        const ext = validTriageRows.filter(r => {
+             // @ts-ignore
+             const diff = now.getTime() - r._parsedDate.getTime();
+             return diff <= extendedWindow && diff >= -TIMEZONE_BUFFER;
+        });
+        
         if (ext.length > 0) {
             triageFiltered = ext;
             extended = true;
@@ -413,7 +432,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                     )}
                 </div>
                 <p className="text-[9px] text-indigo-300 italic">
-                  * Filtro base: Horário de Inclusão no sistema | Ordenação: Data/Hora Clínica
+                  * Filtro Timezone: Tolerância de -5h para sincronia com Servidor/MT
                 </p>
             </div>
             <div className="text-right flex items-center gap-4">
