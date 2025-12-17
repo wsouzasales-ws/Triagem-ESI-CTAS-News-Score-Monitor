@@ -1,15 +1,22 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Acolhimento Hospital São Mateus Cuiabá</title>
+    <title>Triagem Híbrida ESI + CTAS + NEWS SCORE</title>
+    
+    <!-- Favicon: Pulso Cardíaco Vermelho em Fundo Branco -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23ffffff'/%3E%3Cpath d='M76.8 256h76.8l51.2-153.6 102.4 307.2 51.2-153.6h76.8' stroke='%23e11d48' stroke-width='40' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E" type="image/svg+xml">
+
+    <!-- Tailwind via CDN (Mantido para facilitar, em produção idealmente usaria postcss) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bibliotecas Globais mantidas via CDN conforme lógica da aplicação -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <!-- Adicionando SheetJS para exportação Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    
     <style>
       body {
         font-family: 'Inter', sans-serif;
@@ -19,10 +26,12 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0"
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
@@ -30,6 +39,7 @@
 </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <!-- Entry Point do Vite -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
