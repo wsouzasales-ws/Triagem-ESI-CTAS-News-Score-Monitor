@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Search, FileText, Printer, CalendarDays, User, Clock, Filter, History, List, BedDouble, Activity } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, FileText, Printer, CalendarDays, User, Clock, Filter, List, BedDouble, Activity, FileSpreadsheet, Download } from 'lucide-react';
 import { fetchWithRetry } from '../utils/api';
 
 interface Props {
@@ -96,6 +96,52 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     }
   };
 
+  const handleExportExcel = () => {
+    if (historyData.length === 0) return;
+    // @ts-ignore
+    if (typeof XLSX === 'undefined') return alert('Biblioteca Excel não carregada.');
+
+    const dataToExport = historyData.map(row => ({
+      'Origem': row.source === 'internation' ? 'INTERNAÇÃO' : 'TRIAGEM',
+      'Inclusão Sistema': row.systemTimestamp,
+      'Data Avaliação': row.evaluationDate,
+      'Hora Avaliação': row.evaluationTime,
+      'Prontuário': row.medicalRecord,
+      'Paciente': row.name,
+      'Setor/Leito': row.sector ? `${row.sector} - ${row.bed}` : '-',
+      'Classificação': row.source === 'internation' ? `NEWS ${row.newsScore}` : `ESI ${row.esiLevel}`,
+      'SSVV': row.source === 'internation' 
+        ? `PA: ${row.vitals?.pas}x${row.vitals?.pad} | FC: ${row.vitals?.fc} | FR: ${row.vitals?.fr} | T: ${row.vitals?.temp} | SpO2: ${row.vitals?.spo2}`
+        : `PA: ${row.vitals?.pa} | FC: ${row.vitals?.fc} | FR: ${row.vitals?.fr} | T: ${row.vitals?.temp} | SpO2: ${row.vitals?.spo2}`,
+      'Obs/Queixa': row.source === 'internation' ? row.observations : row.complaint
+    }));
+
+    // @ts-ignore
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    // @ts-ignore
+    const wb = XLSX.utils.book_new();
+    // @ts-ignore
+    XLSX.utils.book_append_sheet(wb, ws, "Histórico");
+    // @ts-ignore
+    XLSX.writeFile(wb, `Historico_Acolhimento_${new Date().getTime()}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    if (historyData.length === 0) return;
+    const element = document.getElementById('history-table-container');
+    if (!element) return;
+
+    const opt = {
+      margin: 10,
+      filename: `Relatorio_Historico_${new Date().getTime()}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+    // @ts-ignore
+    window.html2pdf().set(opt).from(element).save();
+  };
+
   const getEsiColor = (levelStr: any) => {
     const level = String(levelStr).replace(/\D/g, '');
     switch(level) {
@@ -118,9 +164,27 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <h2 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2">
-            <Filter className="text-teal-600" /> Histórico Unificado (Triagem + Internação)
-        </h2>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+                <Filter className="text-teal-600" /> Histórico Unificado
+            </h2>
+            <div className="flex gap-2 w-full md:w-auto">
+                <button 
+                  onClick={handleExportExcel} 
+                  disabled={historyData.length === 0}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold text-xs disabled:opacity-50 transition-colors"
+                >
+                    <FileSpreadsheet size={16} /> EXCEL
+                </button>
+                <button 
+                  onClick={handleExportPDF} 
+                  disabled={historyData.length === 0}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded font-bold text-xs disabled:opacity-50 transition-colors"
+                >
+                    <Printer size={16} /> PDF
+                </button>
+            </div>
+        </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-lg">
             <button onClick={() => setFilterMode('12h')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === '12h' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
@@ -136,7 +200,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
         <div className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 p-4 rounded border border-slate-200">
             <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-slate-600 mb-1">Nº PRONTUÁRIO</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nº Prontuário</label>
                 <div className="relative">
                   <User className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                   <input type="text" value={searchId} onChange={(e) => setSearchId(e.target.value)} className="w-full pl-10 p-2.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-500 outline-none font-bold" placeholder="Digite o prontuário..."/>
@@ -145,7 +209,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
             {filterMode === 'date' && (
                 <div className="flex-1 w-full animate-fade-in">
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Data</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Data</label>
                     <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="w-full p-2.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-500 outline-none font-bold"/>
                 </div>
             )}
@@ -157,11 +221,12 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow border border-slate-200 overflow-x-auto">
+      <div id="history-table-container" className="bg-white rounded-lg shadow border border-slate-200 overflow-x-auto">
              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-xs">
+                <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-widest">
                     <tr>
                         <th className="p-3 border-b">Origem</th>
+                        <th className="p-3 border-b">Inclusão (Sistema)</th>
                         <th className="p-3 border-b">Avaliação</th>
                         <th className="p-3 border-b">Prontuário</th>
                         <th className="p-3 border-b">Paciente</th>
@@ -184,13 +249,16 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                                     </span>
                                 )}
                             </td>
+                            <td className="p-3 text-[10px] font-medium text-slate-400 font-mono">
+                                {row.systemTimestamp || '-'}
+                            </td>
                             <td className="p-3 font-bold text-slate-700">
                                 {row.evaluationDate} {row.evaluationTime}
                             </td>
                             <td className="p-3 font-bold text-slate-700">{row.medicalRecord}</td>
                             <td className="p-3 font-bold text-slate-700">
                                 {row.name}
-                                {row.sector && <span className="block text-[10px] font-normal text-slate-400 uppercase">{row.sector} - {row.bed}</span>}
+                                {row.sector && <span className="block text-[10px] font-normal text-slate-400 uppercase tracking-tighter">{row.sector} - {row.bed}</span>}
                             </td>
                             <td className="p-3 text-center">
                                 {row.source === 'internation' ? (
@@ -218,7 +286,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                             </td>
                         </tr>
                     )) : searched && (
-                        <tr><td colSpan={7} className="p-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
+                        <tr><td colSpan={8} className="p-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
                     )}
                 </tbody>
              </table>
