@@ -11,7 +11,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [copied, setCopied] = useState(false);
 
-  // Script v47: Código COMPLETO para evitar erro de "Ação não mapeada"
+  // Script v48: Mapeamento COMPLETO de vitais no filterHistory
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -43,7 +43,7 @@ function setupStructure() {
   var sheetUsers = ss.getSheetByName("Usuários");
   if (!sheetUsers) sheetUsers = ss.insertSheet("Usuários");
 
-  return "Estrutura v47 OK.";
+  return "Estrutura v48 OK.";
 }
 
 function doGet(e) {
@@ -55,7 +55,7 @@ function doGet(e) {
     
     if (!action) {
        setupStructure();
-       return jsonResponse({ "result": "success", "message": "Script v47 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v48 Online" });
     }
 
     if (action === 'filterHistory') {
@@ -63,6 +63,7 @@ function doGet(e) {
        var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
        var resultRows = [];
        
+       // Triagem
        var sheetTriage = ss.getSheets()[0];
        var valsT = sheetTriage.getDataRange().getDisplayValues();
        for (var i = 1; i < valsT.length; i++) {
@@ -72,12 +73,13 @@ function doGet(e) {
                 source: 'triage',
                 systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], 
                 name: row[3], medicalRecord: row[4], age: row[6], complaint: row[7], 
-                esiLevel: row[15], triageTitle: row[16], discriminators: row[19],
+                esiLevel: row[15], triageTitle: row[16],
                 vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
              });
           }
        }
 
+       // Internação
        var sheetInt = ss.getSheetByName("Pacientes internados");
        if (sheetInt) {
           var valsI = sheetInt.getDataRange().getDisplayValues();
@@ -87,9 +89,9 @@ function doGet(e) {
                 resultRows.push({
                    source: 'internation',
                    systemTimestamp: rowI[0], evaluationDate: rowI[1], evaluationTime: rowI[2], 
-                   name: rowI[3], medicalRecord: rowI[4], sector: rowI[6], bed: rowI[7], isReevaluation: rowI[8],
+                   name: rowI[3], medicalRecord: rowI[4], sector: rowI[6], bed: rowI[7],
                    newsScore: rowI[19], riskText: rowI[20], observations: rowI[18],
-                   vitals: { pas: rowI[9], pad: rowI[10], fc: rowI[11], fr: rowI[12], temp: rowI[13], spo2: rowI[14], pain: rowI[17] }
+                   vitals: { pas: rowI[9], pad: rowI[10], fc: rowI[11], fr: rowI[12], temp: rowI[13], spo2: rowI[14], consc: rowI[15], o2: rowI[16], pain: rowI[17] }
                 });
              }
           }
@@ -97,15 +99,14 @@ function doGet(e) {
        return jsonResponse({ "result": "success", "data": resultRows.reverse() });
     }
 
-    // --- AÇÕES DE BUSCA GERAL (PAINEL TV) ---
     if (action === 'getAll') {
        var sheet = ss.getSheets()[0];
        var values = sheet.getDataRange().getDisplayValues();
        if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
        var rows = values.slice(1).map(function(row) {
          return {
-           systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
-           esiLevel: row[15], triageTitle: row[16], discriminators: row[19],
+           systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], name: row[3], medicalRecord: row[4], age: row[6], complaint: row[7], 
+           esiLevel: row[15], triageTitle: row[16],
            vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
          };
        });
@@ -119,7 +120,7 @@ function doGet(e) {
       if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
       var rows = values.slice(1).map(function(row) {
         return {
-          systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], dob: row[5], sector: row[6], bed: row[7], isReevaluation: row[8],
+          systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], dob: row[5], sector: row[6], bed: row[7],
           vitals: { pas: row[9], pad: row[10], fc: row[11], fr: row[12], temp: row[13], spo2: row[14], consciousness: row[15], o2Sup: row[16], painLevel: row[17] },
           observations: row[18], newsScore: row[19], riskText: row[20]
         };
@@ -127,7 +128,6 @@ function doGet(e) {
       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 100) }); 
     }
 
-    // --- BUSCA INDIVIDUAL ---
     if (action === 'search') {
       var recordToFind = e.parameter.medicalRecord;
       var sheet = ss.getSheets()[0];
@@ -239,14 +239,14 @@ function jsonResponse(obj) {
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                 <Database size={20}/> Backend v47 (Correção do Painel)
+                 <Database size={20}/> Backend v48 (Vitals Completos)
                </h2>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
              </div>
              
              <div className="p-6 overflow-y-auto space-y-4">
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded text-xs text-emerald-900">
-                  <strong>SOLUÇÃO DO ERRO:</strong> Copie o código abaixo (v47) e substitua no seu Google Apps Script. Ele contém as funções <code>getAll</code> que o Painel de Gestão (TV) precisa para funcionar.
+                  <strong>IMPORTANTE:</strong> Atualize o código no Google Apps Script para a <strong>Versão 48</strong> para que o Histórico exiba todos os sinais vitais (Temperatura, FR, SpO2 e Dor).
                 </div>
 
                 <div className="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-auto h-48 relative">

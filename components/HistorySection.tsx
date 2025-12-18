@@ -199,13 +199,21 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                                     <span className={`px-2 py-1 rounded text-[10px] font-black ${getEsiColor(row.esiLevel)}`}>ESI {String(row.esiLevel).replace(/\D/g,'')}</span>
                                 )}
                             </td>
-                            <td className="p-3 text-[10px] font-mono text-slate-600">
-                                {row.source === 'internation' ? 
-                                    `PA: ${row.vitals?.pas}x${row.vitals?.pad} | FC: ${row.vitals?.fc}` : 
-                                    `PA: ${row.vitals?.pa} | FC: ${row.vitals?.fc}`
-                                }
+                            <td className="p-3 text-[10px] font-mono text-slate-600 leading-relaxed">
+                                {row.source === 'internation' ? (
+                                    <div className="flex flex-col">
+                                        <span>PA: {row.vitals?.pas}x{row.vitals?.pad} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
+                                        <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
+                                        {row.vitals?.consc && <span className="text-[9px] text-slate-400 italic">Nível: {row.vitals.consc}</span>}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col">
+                                        <span>PA: {row.vitals?.pa} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
+                                        <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
+                                    </div>
+                                )}
                             </td>
-                            <td className="p-3 text-xs text-slate-500 max-w-[200px] truncate" title={row.source === 'internation' ? row.observations : row.complaint}>
+                            <td className="p-3 text-xs text-slate-500 max-w-[200px] truncate whitespace-normal" title={row.source === 'internation' ? row.observations : row.complaint}>
                                 {row.source === 'internation' ? row.observations : row.complaint}
                             </td>
                         </tr>
