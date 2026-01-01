@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, FileText, Printer, CalendarDays, User, Clock, Filter, List, BedDouble, Activity, FileSpreadsheet, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Printer, CalendarDays, User, Clock, Filter, List, BedDouble, Activity, FileSpreadsheet, Trash2, AlertCircle, X, CheckSquare, Square } from 'lucide-react';
 import { fetchWithRetry } from '../utils/api';
 
 interface Props {
@@ -7,7 +7,7 @@ interface Props {
 }
 
 export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
-  const [filterMode, setFilterMode] = useState<'12h' | 'date' | 'all'>('date');
+  const [filterMode, setFilterMode] = useState<'24h' | 'date' | 'all'>('24h'); // Padrão alterado para 24h
   const [searchId, setSearchId] = useState('');
   const [searchDate, setSearchDate] = useState('');
   
@@ -15,6 +15,13 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Novos estados para seleção e exclusão
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isInvalidating, setIsInvalidating] = useState(false);
+
+  const getRowKey = (row: any) => `${row.systemTimestamp}-${row.medicalRecord}`;
 
   const parseDateRobust = (dateStr: string, timeStr?: string) => {
     try {
@@ -46,6 +53,14 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
            hours = parseInt(timeParts[0]);
            minutes = parseInt(timeParts[1]);
         }
+      } else if (dateStr.includes(' ')) {
+          // Fallback para quando a data inclui hora (timestamp do sistema)
+          const timePart = dateStr.split(' ')[1];
+          const timeParts = timePart.split(':');
+          if (timeParts.length >= 2) {
+             hours = parseInt(timeParts[0]);
+             minutes = parseInt(timeParts[1]);
+          }
       }
       const d = new Date(year, month, day, hours, minutes);
       return isNaN(d.getTime()) ? null : d;
@@ -61,6 +76,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     setIsLoading(true);
     setSearched(false);
     setErrorMessage('');
+    setSelectedItems(new Set()); 
     
     try {
       const timestamp = new Date().getTime();
@@ -75,13 +91,25 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
       if (data.result === 'success') {
         let rows = Array.isArray(data.data) ? data.data : [];
-        if (filterMode === '12h') {
+        
+        // ORDENAÇÃO CLIENT-SIDE (Garante Mais Recente Primeiro)
+        rows.sort((a, b) => {
+            const dateA = parseDateRobust(a.systemTimestamp || `${a.evaluationDate} ${a.evaluationTime}`);
+            const dateB = parseDateRobust(b.systemTimestamp || `${b.evaluationDate} ${b.evaluationTime}`);
+            if (!dateA || !dateB) return 0;
+            return dateB.getTime() - dateA.getTime();
+        });
+
+        if (filterMode === '24h') {
             const now = new Date();
             rows = rows.filter(row => {
-                const rowDate = parseDateRobust(row.evaluationDate, row.evaluationTime);
+                const rowDate = parseDateRobust(row.systemTimestamp || row.evaluationDate, row.evaluationTime);
                 if (!rowDate) return false;
                 const diff = now.getTime() - rowDate.getTime();
-                return Math.abs(diff) <= (12 * 60 * 60 * 1000);
+                // Permite até 24h no passado E até 24h no futuro (Buffer Timezone/Data Errada)
+                const isRecentPast = diff >= 0 && diff <= (24 * 60 * 60 * 1000);
+                const isFutureBuffer = diff < 0 && diff >= -(24 * 60 * 60 * 1000); 
+                return isRecentPast || isFutureBuffer;
             });
         }
         setHistoryData(rows);
@@ -96,6 +124,62 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     }
   };
 
+  // Auto-Search on Mount (Inicializa com dados)
+  useEffect(() => {
+      handleSearch();
+  }, [filterMode]); // Recarrega se mudar o modo
+
+  const toggleSelectAll = () => {
+    if (selectedItems.size === historyData.length && historyData.length > 0) {
+      setSelectedItems(new Set());
+    } else {
+      const allKeys = historyData.map(row => getRowKey(row));
+      setSelectedItems(new Set(allKeys));
+    }
+  };
+
+  const toggleSelectItem = (key: string) => {
+    const newSet = new Set(selectedItems);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    setSelectedItems(newSet);
+  };
+
+  const handleInvalidateBatch = () => {
+     setShowDeleteModal(false);
+     setIsInvalidating(true); 
+
+     const itemsToInvalidate = historyData
+       .filter(row => selectedItems.has(getRowKey(row)))
+       .map(row => ({
+          systemTimestamp: row.systemTimestamp,
+          medicalRecord: row.medicalRecord,
+          source: row.source 
+       }));
+
+     const updatedData = historyData.map(row => {
+        if (selectedItems.has(getRowKey(row))) {
+            return { ...row, status: 'INVALIDADO' };
+        }
+        return row;
+     });
+     setHistoryData(updatedData);
+     setSelectedItems(new Set()); 
+
+     fetchWithRetry(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+            action: 'invalidateBatch',
+            items: itemsToInvalidate
+        })
+     }).catch(err => console.error("Erro ao invalidar em background:", err))
+       .finally(() => setIsInvalidating(false));
+  };
+
   const handleExportExcel = () => {
     if (historyData.length === 0) return;
     // @ts-ignore
@@ -103,6 +187,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
     const dataToExport = historyData.map(row => ({
       'Origem': row.source === 'internation' ? 'INTERNAÇÃO' : 'TRIAGEM',
+      'Status': row.status === 'INVALIDADO' ? 'INVALIDADO' : 'ATIVO',
       'Inclusão Sistema': row.systemTimestamp,
       'Data Avaliação': row.evaluationDate,
       'Hora Avaliação': row.evaluationTime,
@@ -162,13 +247,42 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-20">
+    <div className="space-y-6 animate-fade-in pb-20 relative">
+      
+      {/* MODAL DE CONFIRMAÇÃO */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+           <div className="bg-white rounded-lg shadow-2xl max-w-sm w-full p-6 animate-fade-in">
+              <div className="flex items-center gap-3 text-rose-600 mb-4">
+                 <div className="bg-rose-100 p-2 rounded-full"><AlertCircle size={24}/></div>
+                 <h3 className="text-lg font-bold">Confirmar Invalidação</h3>
+              </div>
+              <p className="text-sm text-slate-600 mb-6">
+                 Você está prestes a invalidar <strong>{selectedItems.size}</strong> registros. 
+                 Eles não serão apagados permanentemente, mas marcados como "INVALIDADO" no sistema.
+              </p>
+              <div className="flex justify-end gap-3">
+                 <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded">Cancelar</button>
+                 <button onClick={handleInvalidateBatch} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded shadow-sm">Sim, Invalidar</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
                 <Filter className="text-teal-600" /> Histórico Unificado
             </h2>
             <div className="flex gap-2 w-full md:w-auto">
+                {selectedItems.size > 0 && (
+                    <button 
+                      onClick={() => setShowDeleteModal(true)} 
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded font-bold text-xs shadow-sm transition-colors animate-fade-in"
+                    >
+                        <Trash2 size={16} /> INVALIDAR ({selectedItems.size})
+                    </button>
+                )}
                 <button 
                   onClick={handleExportExcel} 
                   disabled={historyData.length === 0}
@@ -187,8 +301,8 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-lg">
-            <button onClick={() => setFilterMode('12h')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === '12h' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
-                <Clock size={18} /> Últimas 12h
+            <button onClick={() => setFilterMode('24h')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === '24h' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
+                <Clock size={18} /> Últimas 24h
             </button>
             <button onClick={() => setFilterMode('date')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === 'date' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
                 <CalendarDays size={18} /> Data Específica
@@ -225,6 +339,11 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
              <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-widest">
                     <tr>
+                        <th className="p-3 border-b text-center w-10">
+                            <div className="cursor-pointer" onClick={toggleSelectAll}>
+                                {historyData.length > 0 && selectedItems.size === historyData.length ? <CheckSquare size={16} className="text-teal-600"/> : <Square size={16} className="text-slate-400"/>}
+                            </div>
+                        </th>
                         <th className="p-3 border-b">Origem</th>
                         <th className="p-3 border-b">Inclusão (Sistema)</th>
                         <th className="p-3 border-b">Avaliação</th>
@@ -236,57 +355,68 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {historyData.length > 0 ? historyData.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-3">
-                                {row.source === 'internation' ? (
-                                    <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
-                                        <BedDouble size={12}/> INTERNAÇÃO
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center gap-1.5 text-[10px] font-black text-orange-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                                        <Activity size={12}/> TRIAGEM
-                                    </span>
-                                )}
-                            </td>
-                            <td className="p-3 text-[10px] font-medium text-slate-400 font-mono">
-                                {row.systemTimestamp || '-'}
-                            </td>
-                            <td className="p-3 font-bold text-slate-700">
-                                {row.evaluationDate} {row.evaluationTime}
-                            </td>
-                            <td className="p-3 font-bold text-slate-700">{row.medicalRecord}</td>
-                            <td className="p-3 font-bold text-slate-700">
-                                {row.name}
-                                {row.sector && <span className="block text-[10px] font-normal text-slate-400 uppercase tracking-tighter">{row.sector} - {row.bed}</span>}
-                            </td>
-                            <td className="p-3 text-center">
-                                {row.source === 'internation' ? (
-                                    <span className={`px-2 py-1 rounded text-[10px] font-black ${getNewsBadge(row.newsScore)}`}>NEWS {row.newsScore}</span>
-                                ) : (
-                                    <span className={`px-2 py-1 rounded text-[10px] font-black ${getEsiColor(row.esiLevel)}`}>ESI {String(row.esiLevel).replace(/\D/g,'')}</span>
-                                )}
-                            </td>
-                            <td className="p-3 text-[10px] font-mono text-slate-600 leading-relaxed">
-                                {row.source === 'internation' ? (
-                                    <div className="flex flex-col">
-                                        <span>PA: {row.vitals?.pas}x{row.vitals?.pad} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
-                                        <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
-                                        {row.vitals?.consc && <span className="text-[9px] text-slate-400 italic">Nível: {row.vitals.consc}</span>}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col">
-                                        <span>PA: {row.vitals?.pa} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
-                                        <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
-                                    </div>
-                                )}
-                            </td>
-                            <td className="p-3 text-xs text-slate-500 max-w-[200px] truncate whitespace-normal" title={row.source === 'internation' ? row.observations : row.complaint}>
-                                {row.source === 'internation' ? row.observations : row.complaint}
-                            </td>
-                        </tr>
-                    )) : searched && (
-                        <tr><td colSpan={8} className="p-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
+                    {historyData.length > 0 ? historyData.map((row, idx) => {
+                        const isInvalid = row.status === 'INVALIDADO';
+                        const isSelected = selectedItems.has(getRowKey(row));
+                        
+                        return (
+                          <tr key={idx} className={`transition-colors ${isInvalid ? 'bg-slate-100/50 opacity-60 grayscale' : 'hover:bg-slate-50'} ${isSelected ? 'bg-teal-50' : ''}`}>
+                              <td className="p-3 text-center">
+                                  <div className="cursor-pointer" onClick={() => toggleSelectItem(getRowKey(row))}>
+                                      {isSelected ? <CheckSquare size={16} className="text-teal-600"/> : <Square size={16} className="text-slate-300"/>}
+                                  </div>
+                              </td>
+                              <td className="p-3">
+                                  {row.source === 'internation' ? (
+                                      <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                                          <BedDouble size={12}/> INTERNAÇÃO
+                                      </span>
+                                  ) : (
+                                      <span className="flex items-center gap-1.5 text-[10px] font-black text-orange-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                                          <Activity size={12}/> TRIAGEM
+                                      </span>
+                                  )}
+                              </td>
+                              <td className={`p-3 text-[10px] font-medium font-mono ${isInvalid ? 'text-slate-500 line-through' : 'text-slate-400'}`}>
+                                  {row.systemTimestamp || '-'}
+                              </td>
+                              <td className={`p-3 font-bold text-slate-700 ${isInvalid ? 'line-through' : ''}`}>
+                                  {row.evaluationDate} {row.evaluationTime}
+                              </td>
+                              <td className={`p-3 font-bold text-slate-700 ${isInvalid ? 'line-through' : ''}`}>{row.medicalRecord}</td>
+                              <td className={`p-3 font-bold text-slate-700 ${isInvalid ? 'line-through' : ''}`}>
+                                  {row.name}
+                                  {row.sector && <span className="block text-[10px] font-normal text-slate-400 uppercase tracking-tighter">{row.sector} - {row.bed}</span>}
+                                  {isInvalid && <span className="block text-[10px] font-black text-rose-600 uppercase mt-1 flex items-center gap-1"><Trash2 size={10}/> REGISTRO INVALIDADO</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                  {row.source === 'internation' ? (
+                                      <span className={`px-2 py-1 rounded text-[10px] font-black ${getNewsBadge(row.newsScore)} ${isInvalid ? 'opacity-50' : ''}`}>NEWS {row.newsScore}</span>
+                                  ) : (
+                                      <span className={`px-2 py-1 rounded text-[10px] font-black ${getEsiColor(row.esiLevel)} ${isInvalid ? 'opacity-50' : ''}`}>ESI {String(row.esiLevel).replace(/\D/g,'')}</span>
+                                  )}
+                              </td>
+                              <td className={`p-3 text-[10px] font-mono text-slate-600 leading-relaxed ${isInvalid ? 'line-through opacity-70' : ''}`}>
+                                  {row.source === 'internation' ? (
+                                      <div className="flex flex-col">
+                                          <span>PA: {row.vitals?.pas}x{row.vitals?.pad} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
+                                          <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
+                                          {row.vitals?.consc && <span className="text-[9px] text-slate-400 italic">Nível: {row.vitals.consc}</span>}
+                                      </div>
+                                  ) : (
+                                      <div className="flex flex-col">
+                                          <span>PA: {row.vitals?.pa} | FC: {row.vitals?.fc} | FR: {row.vitals?.fr}</span>
+                                          <span>T: {row.vitals?.temp}ºC | SpO2: {row.vitals?.spo2}% | Dor: {row.vitals?.pain}</span>
+                                      </div>
+                                  )}
+                              </td>
+                              <td className={`p-3 text-xs text-slate-500 max-w-[200px] truncate whitespace-normal ${isInvalid ? 'line-through' : ''}`} title={row.source === 'internation' ? row.observations : row.complaint}>
+                                  {row.source === 'internation' ? row.observations : row.complaint}
+                              </td>
+                          </tr>
+                        );
+                    }) : searched && (
+                        <tr><td colSpan={9} className="p-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
                     )}
                 </tbody>
              </table>

@@ -110,6 +110,7 @@ export interface SheetRowData {
   esiLevel: number;
   triageTitle: string;
   discriminators?: string; // Coluna T (Index 19)
+  status?: string; // Novo: Controle de Invalidação
   vitals?: {
     pa: string;
     fc: string;
@@ -132,6 +133,7 @@ export interface InternationSheetRowData {
   newsScore: string;
   riskText: string;
   observations: string;
+  status?: string; // Novo: Controle de Invalidação
   vitals?: {
       pas: string; pad: string; fc: string; fr: string; 
       temp: string; spo2: string; consciousness: string; 
