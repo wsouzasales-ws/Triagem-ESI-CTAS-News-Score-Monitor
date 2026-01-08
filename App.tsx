@@ -13,7 +13,9 @@ const TechnicalSheetModal = React.lazy(() => import('./components/TechnicalSheet
 const AppScriptGenerator = React.lazy(() => import('./components/AppScriptGenerator').then(module => ({ default: module.AppScriptGenerator })));
 const HistorySection = React.lazy(() => import('./components/HistorySection').then(module => ({ default: module.HistorySection })));
 const InternationSection = React.lazy(() => import('./components/InternationSection').then(module => ({ default: module.InternationSection })));
-const InternationReportsSection = React.lazy(() => import('./components/InternationReportsSection').then(module => ({ default: module.InternationReportsSection })));
+
+// CORREÇÃO: Importação Padrão (Default) Simplificada para evitar erro de Lazy Load
+const InternationReportsSection = React.lazy(() => import('./components/InternationReportsSection'));
 
 // Components that are default exported
 const TriageSection = React.lazy(() => import('./components/TriageSection'));

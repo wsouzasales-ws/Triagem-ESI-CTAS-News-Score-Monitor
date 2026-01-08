@@ -18,7 +18,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
-  // Script v57: Fix Invalidate Date Match (getDisplayValues)
+  // Script v58: Increased Limit to 3000 records for Reporting
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -98,7 +98,7 @@ function setupStructure() {
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura v57 OK.";
+  return "Estrutura v58 OK.";
 }
 
 function doGet(e) {
@@ -110,7 +110,7 @@ function doGet(e) {
     
     if (!action) {
        setupStructure();
-       return jsonResponse({ "result": "success", "message": "Script v57 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v58 Online" });
     }
 
     if (action === 'filterHistory') {
@@ -118,7 +118,6 @@ function doGet(e) {
        var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
        var resultRows = [];
        
-       // Busca na Triagem
        var sheetTriage = ss.getSheets()[0];
        var valsT = sheetTriage.getDataRange().getDisplayValues();
        for (var i = 1; i < valsT.length; i++) {
@@ -135,7 +134,6 @@ function doGet(e) {
           }
        }
 
-       // Busca na Internação
        var sheetInt = ss.getSheetByName("Pacientes internados");
        if (sheetInt) {
           var valsI = sheetInt.getDataRange().getDisplayValues();
@@ -167,7 +165,8 @@ function doGet(e) {
            vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
          };
        });
-       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 100) });
+       // AUMENTADO DE 100 PARA 3000
+       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 3000) });
     }
 
     if (action === 'getAllInternation') {
@@ -182,7 +181,8 @@ function doGet(e) {
           observations: row[18], newsScore: row[19], riskText: row[20], status: row[22] || ''
         };
       });
-      return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 100) }); 
+      // AUMENTADO DE 100 PARA 3000
+      return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 3000) }); 
     }
 
     if (action === 'search') {
@@ -251,9 +251,6 @@ function doPost(e) {
 
         var sheetTriage = ss.getSheets()[0];
         var sheetInt = ss.getSheetByName("Pacientes internados");
-        
-        // CRITICAL FIX: Usar getDisplayValues() para garantir que as datas sejam strings comparáveis
-        // getValues() retorna Objetos Date para colunas de data, quebrando a comparação de string.
         var triageData = sheetTriage.getDataRange().getDisplayValues();
         var intData = sheetInt ? sheetInt.getDataRange().getDisplayValues() : [];
         var count = 0;
@@ -268,9 +265,7 @@ function doPost(e) {
                var rowTs = String(targetData[i][0]).trim(); 
                var rowMr = String(targetData[i][4]).trim(); 
                
-               // Comparação exata de string
                if (rowTs === String(item.systemTimestamp).trim() && rowMr === String(item.medicalRecord).trim()) {
-                   // Coluna W = 23
                    targetSheet.getRange(i + 1, 23).setValue("INVALIDADO");
                    count++;
                    break; 
@@ -399,14 +394,14 @@ function jsonResponse(obj) {
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                 <Database size={20}/> Backend v57 (Fix Invalidação)
+                 <Database size={20}/> Backend v58 (Limite 3000 Rows)
                </h2>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
              </div>
              
              <div className="p-6 overflow-y-auto space-y-6">
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded text-sm text-emerald-900">
-                  <strong>ATUALIZAÇÃO CRÍTICA v57:</strong> Esta versão corrige o erro onde o status "INVALIDADO" não era salvo na planilha devido a um erro de comparação de datas. Copie e atualize no Apps Script.
+                  <strong>ATUALIZAÇÃO CRÍTICA v58:</strong> Aumenta o limite de busca para 3000 registros para corrigir o problema de dados incompletos nos relatórios mensais.
                 </div>
 
                 <div className="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-auto h-48 relative border border-slate-700">

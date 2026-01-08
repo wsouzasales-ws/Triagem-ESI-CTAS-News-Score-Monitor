@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BedDouble, RefreshCw, FileText, Brain, Flame, Heart, Zap, Activity, AlertTriangle, AlertCircle, TrendingUp, FileSpreadsheet } from 'lucide-react';
+import { BedDouble, RefreshCw, FileSpreadsheet, Brain, Flame, Heart, Zap, AlertCircle, TrendingUp } from 'lucide-react';
 import { InternationSheetRowData } from '../types';
 
 interface Props {
@@ -8,7 +8,7 @@ interface Props {
   isLoadingReports: boolean;
 }
 
-export const InternationReportsSection: React.FC<Props> = React.memo(({
+const InternationReportsSection: React.FC<Props> = ({
   reportData,
   handleSyncFromSheet,
   isLoadingReports
@@ -27,16 +27,23 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
     }
 
     const filtered = reportData.filter(row => {
-        const dateStr = row.evaluationDate ? String(row.evaluationDate) : '';
-        // Converte para formato comparável (YYYY-MM) se necessário
-        let rowMonth = "";
+        const dateStr = row.evaluationDate ? String(row.evaluationDate).trim() : '';
+        if (!dateStr) return false;
+
+        let rowYYYYMM = '';
+
         if(dateStr.includes('/')) {
-            const [d, m, y] = dateStr.split('/');
-            rowMonth = `${y}-${m}`;
+            const parts = dateStr.split('/');
+            if (parts.length >= 3) {
+                const m = parts[1].padStart(2, '0');
+                const y = parts[2].substring(0, 4);
+                rowYYYYMM = `${y}-${m}`;
+            }
         } else if(dateStr.includes('-')) {
-            rowMonth = dateStr.slice(0,7);
+            rowYYYYMM = dateStr.slice(0,7);
         }
-        return rowMonth === reportMonth;
+        
+        return rowYYYYMM === reportMonth;
     });
 
     const protocolCounts = { avc: 0, sepse: 0, dorToracica: 0, dorIntensa: 0 };
@@ -45,14 +52,12 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
     const highRiskList: InternationSheetRowData[] = [];
 
     filtered.forEach(row => {
-        // Contagem de Protocolos via Observações
         const obs = (row.observations || '').toLowerCase();
         if (obs.includes('protocolo avc') || obs.includes('avc')) protocolCounts.avc++;
         if (obs.includes('protocolo sepse') || obs.includes('sepse')) protocolCounts.sepse++;
         if (obs.includes('protocolo dor torácica') || obs.includes('dor torácica') || obs.includes('sca')) protocolCounts.dorToracica++;
         if (obs.includes('protocolo dor') || obs.includes('dor intensa') || obs.includes('dor >')) protocolCounts.dorIntensa++;
 
-        // Contagem de Risco NEWS
         const score = parseInt(row.newsScore) || 0;
         const riskText = (row.riskText || '').toUpperCase();
         
@@ -72,7 +77,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
         }
     });
 
-    // Ordenar lista de alto risco pela data (mais recente primeiro)
     highRiskList.sort((a, b) => {
         const dateA = (a.evaluationDate || '') + (a.evaluationTime || '');
         const dateB = (b.evaluationDate || '') + (b.evaluationTime || '');
@@ -82,12 +86,10 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
     return { total: filtered.length, highRisk: highRiskTotal, protocolCounts, riskCounts, highRiskList };
   }, [reportData, reportMonth]);
 
-  // Helper para formatar data sem timezone shift (YYYY-MM-DD -> DD/MM/YYYY)
   const formatDateDisplay = (dateStr: string) => {
       if (!dateStr) return '-';
       if (dateStr.includes('-')) {
           const parts = dateStr.split('-');
-          // Se for formato ISO YYYY-MM-DD
           if (parts[0].length === 4) {
               const [y, m, d] = parts;
               return `${d}/${m}/${y}`;
@@ -112,7 +114,7 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
         'Nº Prontuário': item.medicalRecord,
         'NEWS Score': item.newsScore,
         'Risco': item.riskText,
-        'Data Avaliação': formatDateDisplay(item.evaluationDate), // Usa formatador seguro
+        'Data Avaliação': formatDateDisplay(item.evaluationDate),
         'Hora': item.evaluationTime,
         'Setor': item.sector,
         'Leito': item.bed,
@@ -155,7 +157,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
             </button>
         </div>
 
-        {/* KPI CARDS BASICOS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
               <p className="text-xs font-bold text-slate-400 uppercase">Total Avaliações</p>
@@ -173,7 +174,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
 
-        {/* PROTOCOL BREAKDOWN */}
         <h3 className="text-sm font-bold text-slate-700 uppercase mt-4">Detalhamento de Protocolos</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-indigo-50 p-4 rounded-lg shadow-sm border border-indigo-100 text-center hover:shadow-md transition-shadow">
@@ -206,10 +206,7 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
 
-        {/* --- NOVA SEÇÃO DE MONITORAMENTO DE DETERIORAÇÃO --- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            
-            {/* Card Esquerda: Contador Visual */}
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden relative flex flex-col p-6 min-h-[220px]">
                <div className="absolute left-0 top-0 bottom-0 w-2 bg-rose-600"></div>
                <div className="flex justify-between items-start mb-4">
@@ -226,7 +223,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
                </div>
             </div>
 
-            {/* Card Direita: Lista */}
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[220px]">
                <div className="p-4 border-b border-rose-100 bg-rose-50 flex justify-between items-center">
                    <h3 className="font-bold text-rose-900 text-sm flex items-center gap-2">
@@ -267,7 +263,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
                                            </span>
                                        </td>
                                        <td className="p-3 text-right pr-4 text-slate-500 text-xs font-mono">
-                                           {/* CORREÇÃO AQUI: Data formatada manualmente */}
                                            {formatDateDisplay(item.evaluationDate)}
                                        </td>
                                    </tr>
@@ -279,7 +274,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
         
-        {/* RISK DISTRIBUTION CHART */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-700 uppercase mb-4">Distribuição de Risco (NEWS Score)</h3>
             <div className="flex items-end h-40 gap-4 justify-around px-10">
@@ -303,6 +297,6 @@ export const InternationReportsSection: React.FC<Props> = React.memo(({
         </div>
     </div>
   );
-});
+};
 
 export default InternationReportsSection;

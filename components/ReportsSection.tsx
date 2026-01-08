@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileSpreadsheet, RefreshCw, FileText, Brain, Flame, Heart, Zap, TrendingDown, Clock } from 'lucide-react';
+import { FileSpreadsheet, RefreshCw, FileText, Brain, Flame, Heart, Zap, TrendingDown, Clock, CalendarDays } from 'lucide-react';
 import { SheetRowData } from '../types';
 
 interface Props {
@@ -17,19 +17,55 @@ const ReportsSection: React.FC<Props> = React.memo(({
 }) => {
   const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
-  // Helper para criar objeto Date a partir de strings de data (DD/MM/YYYY ou YYYY-MM-DD) e hora (HH:mm)
+  // Helper robusto para extrair YYYY-MM de qualquer string de data
+  const extractYearMonth = (dateRaw: any): string | null => {
+    if (!dateRaw) return null;
+    // Remove aspas e espaços extras que podem vir do JSON e pega apenas a parte da data
+    const s = String(dateRaw).replace(/['"]/g, '').trim().split(' ')[0]; 
+
+    try {
+        // Formato Planilha Coluna B: YYYY-MM-DD (2025-12-15)
+        if (s.includes('-')) {
+            const parts = s.split('-');
+            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}`;
+            // Formato alternativo DD-MM-YYYY com hífen
+            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}`; 
+        }
+        
+        // Formato Planilha Coluna A: DD/MM/YYYY (15/12/2025)
+        if (s.includes('/')) {
+            const parts = s.split('/');
+            if (parts.length >= 3) {
+                // Se o terceiro elemento tem 4 dígitos, é o ano (DD/MM/YYYY) - FORMATO BRASILEIRO
+                if (parts[2].length === 4) {
+                     return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+                }
+                // Se o primeiro elemento tem 4 dígitos (YYYY/MM/DD)
+                if (parts[0].length === 4) {
+                     return `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                }
+            }
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+  };
+
+  // Helper para criar objeto Date a partir de strings de data (para ordenação)
   const parseRowDateTime = (dateStr: string, timeStr: string): Date | null => {
     try {
         if (!dateStr) return null;
         let year = 0, month = 0, day = 0;
+        const cleanDate = String(dateStr).trim().split(' ')[0];
         
-        if (dateStr.includes('/')) {
-            const parts = dateStr.split('/');
+        if (cleanDate.includes('/')) {
+            const parts = cleanDate.split('/');
             day = parseInt(parts[0]);
             month = parseInt(parts[1]) - 1;
             year = parseInt(parts[2]);
-        } else if (dateStr.includes('-')) {
-            const parts = dateStr.split('-');
+        } else if (cleanDate.includes('-')) {
+            const parts = cleanDate.split('-');
             if (parts[0].length === 4) {
                year = parseInt(parts[0]);
                month = parseInt(parts[1]) - 1;
@@ -41,17 +77,19 @@ const ReportsSection: React.FC<Props> = React.memo(({
             }
         }
         
+        if (year < 100 && year > 0) year += 2000;
+        if (year === 0) return null;
+
         let hour = 0, min = 0;
         if (timeStr) {
-            const tParts = timeStr.split(':');
+            const tParts = timeStr.trim().replace(/[^\d:]/g,'').split(':');
             if (tParts.length >= 2) {
                 hour = parseInt(tParts[0]);
                 min = parseInt(tParts[1]);
             }
         }
 
-        if (year > 0) return new Date(year, month, day, hour, min);
-        return null;
+        return new Date(year, month, day, hour, min);
     } catch (e) {
         return null;
     }
@@ -62,17 +100,21 @@ const ReportsSection: React.FC<Props> = React.memo(({
         return { total: 0, reevaluations: 0, worsened: [], esiCounts: [0,0,0,0,0], protocolCounts: { avc: 0, sepse: 0, dorToracica: 0, dorIntensa: 0 } };
     }
 
+    // Extração robusta do nível ESI (pega qualquer dígito encontrado)
     const getEsi = (val: any) => {
         if (!val) return 0;
-        const strVal = String(val).replace(/['"]/g, '').trim();
-        const num = parseInt(strVal, 10);
-        return isNaN(num) ? 0 : num;
+        const strVal = String(val);
+        const match = strVal.match(/[1-5]/);
+        if (match) return parseInt(match[0], 10);
+        return 0;
     };
 
     const filtered = reportData.filter(row => {
-        const dateStr = row.evaluationDate ? String(row.evaluationDate) : '';
-        // Filtro visual básico pelo mês selecionado
-        return dateStr.startsWith(reportMonth) || (dateStr.includes('/') && dateStr.split('/')[2] + '-' + dateStr.split('/')[1] === reportMonth);
+        // Tenta usar Data da Avaliação (Col B). Se falhar, tenta Timestamp do Sistema (Col A)
+        // Isso cobre casos onde a coluna B possa estar vazia ou mal formatada
+        const dateToUse = (row.evaluationDate && row.evaluationDate.length > 5) ? row.evaluationDate : row.systemTimestamp;
+        const rowYYYYMM = extractYearMonth(dateToUse);
+        return rowYYYYMM === reportMonth;
     });
 
     const grouped: Record<string, SheetRowData[]> = {};
@@ -85,33 +127,31 @@ const ReportsSection: React.FC<Props> = React.memo(({
             grouped[cleanId].push(row);
         }
 
+        // Contagem de Protocolos
         const disc = (row.discriminators || '').toLowerCase();
-        if (disc.includes('assimetria') || disc.includes('fala') || disc.includes('fraqueza') || disc.includes('visual')) protocolCounts.avc++;
-        if (disc.includes('sepse') || disc.includes('infecção') || disc.includes('sirs')) protocolCounts.sepse++;
-        if (disc.includes('torácica') || disc.includes('toracica')) protocolCounts.dorToracica++;
-        if (disc.includes('dor severa') || disc.includes('dor intensa') || disc.includes('dor >')) protocolCounts.dorIntensa++;
+        const just = (row.triageTitle || '').toLowerCase(); 
+
+        if (disc.includes('assimetria') || disc.includes('fala') || disc.includes('fraqueza') || disc.includes('visual') || just.includes('avc')) protocolCounts.avc++;
+        if (disc.includes('sepse') || disc.includes('infecção') || disc.includes('sirs') || just.includes('sepse')) protocolCounts.sepse++;
+        if (disc.includes('torácica') || disc.includes('toracica') || just.includes('toracica')) protocolCounts.dorToracica++;
+        if (disc.includes('dor severa') || disc.includes('dor intensa') || disc.includes('dor >') || disc.includes('dor 7') || just.includes('dor')) protocolCounts.dorIntensa++;
     });
 
     const worsenedList: { id: string, name: string, oldLevel: number, newLevel: number, date: string, timeDiff: string }[] = [];
     
     Object.values(grouped).forEach(group => {
        if (group.length > 1) {
-          // Ordena cronologicamente dentro do grupo
           group.sort((a, b) => {
-             const dA = parseRowDateTime(a.evaluationDate, a.evaluationTime);
-             const dB = parseRowDateTime(b.evaluationDate, b.evaluationTime);
-             if (!dA || !dB) return 0;
+             const dA = parseRowDateTime(a.evaluationDate, a.evaluationTime) || new Date(0);
+             const dB = parseRowDateTime(b.evaluationDate, b.evaluationTime) || new Date(0);
              return dA.getTime() - dB.getTime();
           });
 
           for (let i = 1; i < group.length; i++) {
              const prev = group[i-1];
              const curr = group[i];
-             
              const prevLevel = getEsi(prev.esiLevel);
              const currLevel = getEsi(curr.esiLevel);
-             
-             // LÓGICA DE TEMPO (EPISÓDIO CLÍNICO)
              const datePrev = parseRowDateTime(prev.evaluationDate, prev.evaluationTime);
              const dateCurr = parseRowDateTime(curr.evaluationDate, curr.evaluationTime);
              
@@ -121,10 +161,6 @@ const ReportsSection: React.FC<Props> = React.memo(({
                  hoursDiff = diffMs / (1000 * 60 * 60);
              }
 
-             // Critérios para Piora Clínica:
-             // 1. Ambos tem ESI válido
-             // 2. ESI Atual é menor (mais grave) que o anterior (Ex: 3 -> 2)
-             // 3. Diferença de tempo <= 24 HORAS (Define o mesmo episódio de atendimento)
              if (currLevel > 0 && prevLevel > 0 && currLevel < prevLevel && hoursDiff <= 24) {
                 worsenedList.push({
                    id: curr.medicalRecord,
@@ -152,14 +188,12 @@ const ReportsSection: React.FC<Props> = React.memo(({
 
   const getEsiColor = (levelStr: any) => {
     const level = String(levelStr).replace(/['"]/g, '').trim();
-    switch(level) {
-      case '1': return 'bg-red-600 text-white';
-      case '2': return 'bg-orange-500 text-white';
-      case '3': return 'bg-yellow-400 text-black';
-      case '4': return 'bg-green-600 text-white';
-      case '5': return 'bg-blue-500 text-white';
-      default: return 'bg-gray-200 text-gray-700';
-    }
+    if (level.includes('1')) return 'bg-red-600 text-white';
+    if (level.includes('2')) return 'bg-orange-500 text-white';
+    if (level.includes('3')) return 'bg-yellow-400 text-black';
+    if (level.includes('4')) return 'bg-green-600 text-white';
+    if (level.includes('5')) return 'bg-blue-500 text-white';
+    return 'bg-gray-200 text-gray-700';
   };
 
   const formatDateDisplay = (dateStr: string) => {
@@ -180,28 +214,28 @@ const ReportsSection: React.FC<Props> = React.memo(({
           dateFormatted: formatDateDisplay(item.date)
       }));
       
-      const adaptedExport = (list: any[], month: string) => {
-          // @ts-ignore
-          if (typeof XLSX === 'undefined') return;
-          const dataToExport = list.map(item => ({
-            'Nome do Paciente': item.name,
-            'Nº Atendimento (AT)': item.id,
-            'Classificação Anterior': `ESI ${item.oldLevel}`,
-            'Classificação Atual': `ESI ${item.newLevel}`,
-            'Data da Reavaliação': item.dateFormatted,
-            'Intervalo (h)': item.timeDiff
-          }));
-          // @ts-ignore
-          const ws = XLSX.utils.json_to_sheet(dataToExport);
-          // @ts-ignore
-          const wb = XLSX.utils.book_new();
-          // @ts-ignore
-          XLSX.utils.book_append_sheet(wb, ws, "Piora Clínica");
-          // @ts-ignore
-          XLSX.writeFile(wb, `Relatorio_Piora_Clinica_${month}.xlsx`);
-      };
-
-      adaptedExport(fixedList, reportMonth);
+      // @ts-ignore
+      if (typeof XLSX === 'undefined') {
+          alert("Erro: Biblioteca XLSX não carregada. Recarregue a página.");
+          return;
+      }
+      
+      const dataToExport = fixedList.map(item => ({
+        'Nome do Paciente': item.name,
+        'Nº Atendimento (AT)': item.id,
+        'Classificação Anterior': `ESI ${item.oldLevel}`,
+        'Classificação Atual': `ESI ${item.newLevel}`,
+        'Data da Reavaliação': item.dateFormatted,
+        'Intervalo (h)': item.timeDiff
+      }));
+      // @ts-ignore
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      // @ts-ignore
+      const wb = XLSX.utils.book_new();
+      // @ts-ignore
+      XLSX.utils.book_append_sheet(wb, ws, "Piora Clínica");
+      // @ts-ignore
+      XLSX.writeFile(wb, `Relatorio_Piora_Clinica_${reportMonth}.xlsx`);
   };
 
   return (
@@ -212,13 +246,22 @@ const ReportsSection: React.FC<Props> = React.memo(({
                 <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2"><FileSpreadsheet className="text-teal-600"/> Indicadores Mensais</h2>
                 <p className="text-xs text-slate-500">Filtrar por mês de referência</p>
               </div>
-              <input 
-                type="month" 
-                value={reportMonth} 
-                onChange={e => setReportMonth(e.target.value)}
-                style={{ colorScheme: 'dark' }}
-                className="border border-slate-600 bg-slate-800 text-white p-2 rounded font-bold outline-none focus:ring-2 focus:ring-teal-500"
-              />
+              <div className="flex items-center gap-2">
+                <input 
+                  type="month" 
+                  value={reportMonth} 
+                  onChange={e => setReportMonth(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="border border-slate-600 bg-slate-800 text-white p-2 rounded font-bold outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button 
+                  onClick={() => setReportMonth(new Date().toISOString().slice(0, 7))}
+                  className="p-2 bg-slate-100 rounded border border-slate-300 hover:bg-slate-200 text-slate-600"
+                  title="Mês Atual"
+                >
+                  <CalendarDays size={18}/>
+                </button>
+              </div>
             </div>
             
             <div className="flex gap-2">
@@ -239,25 +282,31 @@ const ReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
 
+        {/* --- CARDS DE RESUMO --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-slate-400"></div>
               <p className="text-xs font-bold text-slate-400 uppercase">Total Atendimentos</p>
               <p className="text-3xl font-black text-slate-800">{processedReports.total}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
               <p className="text-xs font-bold text-slate-400 uppercase">Reavaliações</p>
               <p className="text-3xl font-black text-teal-600">{processedReports.reevaluations}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
               <p className="text-xs font-bold text-slate-400 uppercase">Piora Clínica (ESI)</p>
               <p className={`text-3xl font-black ${processedReports.worsened.length > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{processedReports.worsened.length}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
               <p className="text-xs font-bold text-slate-400 uppercase">Alta Prioridade (ESI 1+2)</p>
               <p className="text-3xl font-black text-orange-600">{processedReports.esiCounts[0] + processedReports.esiCounts[1]}</p>
             </div>
         </div>
 
+        {/* --- PROTOCOLOS --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-indigo-50 p-4 rounded-lg shadow-sm border border-indigo-100 text-center hover:shadow-md transition-shadow">
               <p className="text-xs font-bold text-indigo-800 uppercase mb-2">Protocolo AVC</p>
@@ -289,9 +338,10 @@ const ReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
         
+        {/* --- GRÁFICO DE BARRAS (ESI) --- */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-700 uppercase mb-4">Distribuição por Classificação (ESI)</h3>
-            <div className="flex items-end h-40 gap-2 md:gap-4 justify-around">
+            <div className="flex items-end h-40 gap-2 md:gap-4 justify-around px-4">
               {[1,2,3,4,5].map((level, i) => {
                   const count = processedReports.esiCounts[i];
                   const max = Math.max(...processedReports.esiCounts, 1);
@@ -309,6 +359,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
             </div>
         </div>
 
+        {/* --- TABELA PIORA CLÍNICA --- */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div className="bg-rose-50 p-3 border-b border-rose-100 flex justify-between items-center">
               <h3 className="text-rose-800 font-bold text-sm flex items-center gap-2">
@@ -319,42 +370,44 @@ const ReportsSection: React.FC<Props> = React.memo(({
               </div>
             </div>
             {processedReports.worsened.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 italic text-sm">Nenhum caso de piora de classificação registrado neste mês (na mesma janela de 24h).</div>
+              <div className="p-8 text-center text-slate-400 italic text-sm">Nenhum caso de piora de classificação registrado neste mês.</div>
             ) : (
-              <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
-                    <tr>
-                        <th className="p-3">Data</th>
-                        <th className="p-3">Paciente (PRONT)</th>
-                        <th className="p-3 text-center">Classificação Anterior</th>
-                        <th className="p-3 text-center">Nova Classificação</th>
-                        <th className="p-3 text-center" title="Tempo decorrido entre as avaliações">Intervalo (h)</th>
-                        <th className="p-3 text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {processedReports.worsened.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-rose-50/30">
-                          <td className="p-3 text-slate-600 font-mono">{formatDateDisplay(item.date)}</td>
-                          <td className="p-3 font-medium text-slate-800">{item.name} <span className="text-xs text-slate-400">({item.id})</span></td>
-                          <td className="p-3 text-center">
-                              <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600">ESI {item.oldLevel}</span>
-                          </td>
-                          <td className="p-3 text-center">
-                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold text-white ${getEsiColor(item.newLevel)}`}>ESI {item.newLevel}</span>
-                          </td>
-                          <td className="p-3 text-center text-xs font-mono text-slate-500">
-                              <div className="flex items-center justify-center gap-1">
-                                <Clock size={12}/> {item.timeDiff}h
-                              </div>
-                          </td>
-                          <td className="p-3 text-center text-rose-600 font-bold text-xs flex justify-center items-center gap-1">
-                              <TrendingDown size={14} /> PIORA
-                          </td>
-                        </tr>
-                    ))}
-                  </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
+                      <tr>
+                          <th className="p-3">Data</th>
+                          <th className="p-3">Paciente (PRONT)</th>
+                          <th className="p-3 text-center">Classificação Anterior</th>
+                          <th className="p-3 text-center">Nova Classificação</th>
+                          <th className="p-3 text-center" title="Tempo decorrido entre as avaliações">Intervalo (h)</th>
+                          <th className="p-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {processedReports.worsened.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-rose-50/30">
+                            <td className="p-3 text-slate-600 font-mono">{formatDateDisplay(item.date)}</td>
+                            <td className="p-3 font-medium text-slate-800">{item.name} <span className="text-xs text-slate-400">({item.id})</span></td>
+                            <td className="p-3 text-center">
+                                <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600">ESI {item.oldLevel}</span>
+                            </td>
+                            <td className="p-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold text-white ${getEsiColor(item.newLevel)}`}>ESI {item.newLevel}</span>
+                            </td>
+                            <td className="p-3 text-center text-xs font-mono text-slate-500">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Clock size={12}/> {item.timeDiff}h
+                                </div>
+                            </td>
+                            <td className="p-3 text-center text-rose-600 font-bold text-xs flex justify-center items-center gap-1">
+                                <TrendingDown size={14} /> PIORA
+                            </td>
+                          </tr>
+                      ))}
+                    </tbody>
+                </table>
+              </div>
             )}
         </div>
     </div>
