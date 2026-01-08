@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Printer, CalendarDays, User, Clock, Filter, List, BedDouble, Activity, FileSpreadsheet, Trash2, AlertCircle, X, CheckSquare, Square } from 'lucide-react';
+import { Search, Printer, CalendarDays, User, Clock, Filter, List, BedDouble, Activity, FileSpreadsheet, Trash2, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { fetchWithRetry } from '../utils/api';
 
 interface Props {
@@ -7,16 +7,15 @@ interface Props {
 }
 
 export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
-  const [filterMode, setFilterMode] = useState<'24h' | 'date' | 'all'>('24h'); // Padrão alterado para 24h
+  const [filterMode, setFilterMode] = useState<'24h' | 'range' | 'all'>('24h');
   const [searchId, setSearchId] = useState('');
-  const [searchDate, setSearchDate] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Novos estados para seleção e exclusão
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isInvalidating, setIsInvalidating] = useState(false);
@@ -54,7 +53,6 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
            minutes = parseInt(timeParts[1]);
         }
       } else if (dateStr.includes(' ')) {
-          // Fallback para quando a data inclui hora (timestamp do sistema)
           const timePart = dateStr.split(' ')[1];
           const timeParts = timePart.split(':');
           if (timeParts.length >= 2) {
@@ -68,8 +66,8 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   };
 
   const handleSearch = async () => {
-    if (filterMode === 'date' && !searchDate && !searchId) {
-      alert("Selecione uma data ou digite o prontuário.");
+    if (filterMode === 'range' && (!dateRange.start || !dateRange.end)) {
+      alert("Selecione a Data Inicial e Final.");
       return;
     }
 
@@ -83,7 +81,9 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       const params = new URLSearchParams({
         action: 'filterHistory',
         medicalRecord: searchId.trim(),
-        date: filterMode === 'date' ? searchDate : '',
+        // Para range, enviamos data vazia para pegar tudo e filtrar no cliente
+        // Isso evita ter que atualizar o backend com uma nova lógica complexa
+        date: '', 
         _: String(timestamp)
       });
 
@@ -92,7 +92,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       if (data.result === 'success') {
         let rows = Array.isArray(data.data) ? data.data : [];
         
-        // ORDENAÇÃO CLIENT-SIDE (Garante Mais Recente Primeiro)
+        // ORDENAÇÃO CLIENT-SIDE (Mais Recente Primeiro)
         rows.sort((a, b) => {
             const dateA = parseDateRobust(a.systemTimestamp || `${a.evaluationDate} ${a.evaluationTime}`);
             const dateB = parseDateRobust(b.systemTimestamp || `${b.evaluationDate} ${b.evaluationTime}`);
@@ -100,18 +100,29 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
             return dateB.getTime() - dateA.getTime();
         });
 
+        // FILTRAGEM CLIENT-SIDE
+        const now = new Date();
+        
         if (filterMode === '24h') {
-            const now = new Date();
             rows = rows.filter(row => {
                 const rowDate = parseDateRobust(row.systemTimestamp || row.evaluationDate, row.evaluationTime);
                 if (!rowDate) return false;
                 const diff = now.getTime() - rowDate.getTime();
-                // Permite até 24h no passado E até 24h no futuro (Buffer Timezone/Data Errada)
-                const isRecentPast = diff >= 0 && diff <= (24 * 60 * 60 * 1000);
-                const isFutureBuffer = diff < 0 && diff >= -(24 * 60 * 60 * 1000); 
-                return isRecentPast || isFutureBuffer;
+                // 24h passadas + buffer futuro
+                return (diff >= 0 && diff <= 86400000) || (diff < 0 && diff >= -86400000);
+            });
+        } 
+        else if (filterMode === 'range') {
+            const start = new Date(`${dateRange.start}T00:00:00`);
+            const end = new Date(`${dateRange.end}T23:59:59`);
+            
+            rows = rows.filter(row => {
+                const rowDate = parseDateRobust(row.systemTimestamp || row.evaluationDate, row.evaluationTime);
+                if (!rowDate) return false;
+                return rowDate >= start && rowDate <= end;
             });
         }
+
         setHistoryData(rows);
       } else {
         setErrorMessage(data.message || "Erro ao buscar dados.");
@@ -124,10 +135,12 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     }
   };
 
-  // Auto-Search on Mount (Inicializa com dados)
   useEffect(() => {
-      handleSearch();
-  }, [filterMode]); // Recarrega se mudar o modo
+      // Auto-busca apenas se não for Range (para não buscar sem datas)
+      if (filterMode !== 'range') {
+          handleSearch();
+      }
+  }, [filterMode]);
 
   const toggleSelectAll = () => {
     if (selectedItems.size === historyData.length && historyData.length > 0) {
@@ -249,7 +262,6 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   return (
     <div className="space-y-6 animate-fade-in pb-20 relative">
       
-      {/* MODAL DE CONFIRMAÇÃO */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
            <div className="bg-white rounded-lg shadow-2xl max-w-sm w-full p-6 animate-fade-in">
@@ -304,8 +316,8 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
             <button onClick={() => setFilterMode('24h')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === '24h' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
                 <Clock size={18} /> Últimas 24h
             </button>
-            <button onClick={() => setFilterMode('date')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === 'date' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
-                <CalendarDays size={18} /> Data Específica
+            <button onClick={() => setFilterMode('range')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === 'range' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
+                <CalendarDays size={18} /> Por Período
             </button>
             <button onClick={() => setFilterMode('all')} className={`py-3 px-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition-all ${filterMode === 'all' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:bg-white'}`}>
                 <List size={18} /> Todo o Histórico
@@ -321,10 +333,16 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                 </div>
             </div>
 
-            {filterMode === 'date' && (
-                <div className="flex-1 w-full animate-fade-in">
-                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Data</label>
-                    <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="w-full p-2.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-500 outline-none font-bold"/>
+            {filterMode === 'range' && (
+                <div className="flex-1 w-full flex gap-2 animate-fade-in">
+                    <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Início</label>
+                        <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="w-full p-2.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-500 outline-none font-bold"/>
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Fim</label>
+                        <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="w-full p-2.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-500 outline-none font-bold"/>
+                    </div>
                 </div>
             )}
 

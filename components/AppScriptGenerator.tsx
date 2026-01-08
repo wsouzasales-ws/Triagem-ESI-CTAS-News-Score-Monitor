@@ -18,7 +18,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
-  // Script v58: Increased Limit to 3000 records for Reporting
+  // Script v59: Increased Limit to 5000 records
   const scriptCode = `
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
@@ -98,7 +98,7 @@ function setupStructure() {
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura v58 OK.";
+  return "Estrutura v59 OK.";
 }
 
 function doGet(e) {
@@ -110,7 +110,7 @@ function doGet(e) {
     
     if (!action) {
        setupStructure();
-       return jsonResponse({ "result": "success", "message": "Script v58 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v59 Online" });
     }
 
     if (action === 'filterHistory') {
@@ -165,8 +165,8 @@ function doGet(e) {
            vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
          };
        });
-       // AUMENTADO DE 100 PARA 3000
-       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 3000) });
+       // AUMENTADO DE 100 PARA 5000
+       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) });
     }
 
     if (action === 'getAllInternation') {
@@ -181,8 +181,8 @@ function doGet(e) {
           observations: row[18], newsScore: row[19], riskText: row[20], status: row[22] || ''
         };
       });
-      // AUMENTADO DE 100 PARA 3000
-      return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 3000) }); 
+      // AUMENTADO DE 100 PARA 5000
+      return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) }); 
     }
 
     if (action === 'search') {
@@ -394,14 +394,14 @@ function jsonResponse(obj) {
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
              <div className="p-6 border-b flex justify-between items-center bg-teal-50">
                <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                 <Database size={20}/> Backend v58 (Limite 3000 Rows)
+                 <Database size={20}/> Backend v59 (Limite 5000 Rows)
                </h2>
                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><Settings size={20}/></button>
              </div>
              
              <div className="p-6 overflow-y-auto space-y-6">
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded text-sm text-emerald-900">
-                  <strong>ATUALIZAÇÃO CRÍTICA v58:</strong> Aumenta o limite de busca para 3000 registros para corrigir o problema de dados incompletos nos relatórios mensais.
+                <div className="bg-rose-50 border border-rose-200 p-4 rounded text-sm text-rose-900">
+                  <strong>AÇÃO NECESSÁRIA:</strong> Se os dados antigos não aparecem, copie este código, vá no Google Apps Script, cole e clique em <strong>IMPLANTAR {'>'} NOVA IMPLANTAÇÃO</strong>. O limite anterior de leitura pode estar cortando os dados antigos.
                 </div>
 
                 <div className="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-auto h-48 relative border border-slate-700">

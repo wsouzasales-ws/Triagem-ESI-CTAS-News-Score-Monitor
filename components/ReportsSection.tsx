@@ -20,30 +20,38 @@ const ReportsSection: React.FC<Props> = React.memo(({
   // Helper robusto para extrair YYYY-MM de qualquer string de data
   const extractYearMonth = (dateRaw: any): string | null => {
     if (!dateRaw) return null;
-    // Remove aspas e espaços extras que podem vir do JSON e pega apenas a parte da data
     const s = String(dateRaw).replace(/['"]/g, '').trim().split(' ')[0]; 
+    if (!s) return null;
 
     try {
-        // Formato Planilha Coluna B: YYYY-MM-DD (2025-12-15)
-        if (s.includes('-')) {
-            const parts = s.split('-');
-            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}`;
-            // Formato alternativo DD-MM-YYYY com hífen
-            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}`; 
-        }
-        
-        // Formato Planilha Coluna A: DD/MM/YYYY (15/12/2025)
-        if (s.includes('/')) {
-            const parts = s.split('/');
-            if (parts.length >= 3) {
-                // Se o terceiro elemento tem 4 dígitos, é o ano (DD/MM/YYYY) - FORMATO BRASILEIRO
-                if (parts[2].length === 4) {
-                     return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+        let day, month, year;
+        const separator = s.includes('/') ? '/' : s.includes('-') ? '-' : null;
+
+        if (separator) {
+            const parts = s.split(separator);
+            
+            if (parts[0].length === 4) {
+                year = parts[0];
+                month = parts[1];
+            } 
+            else if (parts.length >= 3 && parts[2].length === 4) {
+                year = parts[2];
+                const p0 = parseInt(parts[0]);
+                const p1 = parseInt(parts[1]);
+
+                if (p1 > 12) {
+                    month = parts[0]; 
+                } 
+                else if (p0 > 12) {
+                    month = parts[1];
                 }
-                // Se o primeiro elemento tem 4 dígitos (YYYY/MM/DD)
-                if (parts[0].length === 4) {
-                     return `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                else {
+                    month = parts[1]; 
                 }
+            }
+
+            if (year && month) {
+                return `${year}-${String(month).padStart(2, '0')}`;
             }
         }
     } catch (e) {
@@ -52,28 +60,35 @@ const ReportsSection: React.FC<Props> = React.memo(({
     return null;
   };
 
-  // Helper para criar objeto Date a partir de strings de data (para ordenação)
+  // Helper para criar objeto Date a partir de strings de data
   const parseRowDateTime = (dateStr: string, timeStr: string): Date | null => {
     try {
         if (!dateStr) return null;
         let year = 0, month = 0, day = 0;
         const cleanDate = String(dateStr).trim().split(' ')[0];
-        
-        if (cleanDate.includes('/')) {
-            const parts = cleanDate.split('/');
-            day = parseInt(parts[0]);
-            month = parseInt(parts[1]) - 1;
-            year = parseInt(parts[2]);
-        } else if (cleanDate.includes('-')) {
-            const parts = cleanDate.split('-');
+        const separator = cleanDate.includes('/') ? '/' : cleanDate.includes('-') ? '-' : null;
+
+        if (separator) {
+            const parts = cleanDate.split(separator);
             if (parts[0].length === 4) {
                year = parseInt(parts[0]);
                month = parseInt(parts[1]) - 1;
                day = parseInt(parts[2]);
-            } else {
-               day = parseInt(parts[0]);
-               month = parseInt(parts[1]) - 1;
+            } else if (parts[2].length === 4) {
                year = parseInt(parts[2]);
+               const p0 = parseInt(parts[0]);
+               const p1 = parseInt(parts[1]);
+               
+               if (p1 > 12) {
+                   month = p0 - 1;
+                   day = p1;
+               } else if (p0 > 12) {
+                   month = p1 - 1;
+                   day = p0;
+               } else {
+                   month = p1 - 1;
+                   day = p0;
+               }
             }
         }
         
@@ -100,7 +115,6 @@ const ReportsSection: React.FC<Props> = React.memo(({
         return { total: 0, reevaluations: 0, worsened: [], esiCounts: [0,0,0,0,0], protocolCounts: { avc: 0, sepse: 0, dorToracica: 0, dorIntensa: 0 } };
     }
 
-    // Extração robusta do nível ESI (pega qualquer dígito encontrado)
     const getEsi = (val: any) => {
         if (!val) return 0;
         const strVal = String(val);
@@ -110,8 +124,6 @@ const ReportsSection: React.FC<Props> = React.memo(({
     };
 
     const filtered = reportData.filter(row => {
-        // Tenta usar Data da Avaliação (Col B). Se falhar, tenta Timestamp do Sistema (Col A)
-        // Isso cobre casos onde a coluna B possa estar vazia ou mal formatada
         const dateToUse = (row.evaluationDate && row.evaluationDate.length > 5) ? row.evaluationDate : row.systemTimestamp;
         const rowYYYYMM = extractYearMonth(dateToUse);
         return rowYYYYMM === reportMonth;
@@ -127,7 +139,6 @@ const ReportsSection: React.FC<Props> = React.memo(({
             grouped[cleanId].push(row);
         }
 
-        // Contagem de Protocolos
         const disc = (row.discriminators || '').toLowerCase();
         const just = (row.triageTitle || '').toLowerCase(); 
 
@@ -155,10 +166,18 @@ const ReportsSection: React.FC<Props> = React.memo(({
              const datePrev = parseRowDateTime(prev.evaluationDate, prev.evaluationTime);
              const dateCurr = parseRowDateTime(curr.evaluationDate, curr.evaluationTime);
              
+             let timeDiffDisplay = "--:--";
              let hoursDiff = 999;
+
              if (datePrev && dateCurr) {
                  const diffMs = dateCurr.getTime() - datePrev.getTime();
                  hoursDiff = diffMs / (1000 * 60 * 60);
+                 
+                 // Formatação HH:MM
+                 const totalMinutes = Math.floor(diffMs / (1000 * 60));
+                 const h = Math.floor(totalMinutes / 60);
+                 const m = totalMinutes % 60;
+                 timeDiffDisplay = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
              }
 
              if (currLevel > 0 && prevLevel > 0 && currLevel < prevLevel && hoursDiff <= 24) {
@@ -168,7 +187,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
                    oldLevel: prevLevel,
                    newLevel: currLevel,
                    date: curr.evaluationDate,
-                   timeDiff: hoursDiff.toFixed(1)
+                   timeDiff: timeDiffDisplay
                 });
              }
           }
@@ -226,7 +245,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
         'Classificação Anterior': `ESI ${item.oldLevel}`,
         'Classificação Atual': `ESI ${item.newLevel}`,
         'Data da Reavaliação': item.dateFormatted,
-        'Intervalo (h)': item.timeDiff
+        'Duração': item.timeDiff
       }));
       // @ts-ignore
       const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -380,7 +399,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
                           <th className="p-3">Paciente (PRONT)</th>
                           <th className="p-3 text-center">Classificação Anterior</th>
                           <th className="p-3 text-center">Nova Classificação</th>
-                          <th className="p-3 text-center" title="Tempo decorrido entre as avaliações">Intervalo (h)</th>
+                          <th className="p-3 text-center" title="Tempo decorrido entre as avaliações">Intervalo (HH:MM)</th>
                           <th className="p-3 text-center">Status</th>
                       </tr>
                     </thead>
@@ -397,7 +416,7 @@ const ReportsSection: React.FC<Props> = React.memo(({
                             </td>
                             <td className="p-3 text-center text-xs font-mono text-slate-500">
                                 <div className="flex items-center justify-center gap-1">
-                                  <Clock size={12}/> {item.timeDiff}h
+                                  <Clock size={12}/> {item.timeDiff}
                                 </div>
                             </td>
                             <td className="p-3 text-center text-rose-600 font-bold text-xs flex justify-center items-center gap-1">
