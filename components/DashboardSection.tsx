@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Monitor, Info, Volume2, VolumeX, RefreshCw, User, BedDouble, AlertTriangle } from 'lucide-react';
+import { Monitor, Info, Volume2, VolumeX, RefreshCw, User, BedDouble, AlertTriangle, Clock } from 'lucide-react';
 import { SheetRowData, InternationSheetRowData } from '../types';
 
 interface Props {
@@ -24,14 +24,9 @@ const DashboardSection: React.FC<Props> = React.memo(({
 }) => {
   const [isAudioAlertEnabled, setIsAudioAlertEnabled] = useState(false);
   
-  // CORREÇÃO: Inicialização Lazy do useRef para persistência
   const notifiedPatientsRef = useRef<Set<string> | null>(null);
-  
-  // NOVO: Ref para controlar IDs vistos nesta sessão (para evitar falar no Load)
   const sessionKnownIdsRef = useRef<Set<string>>(new Set());
-  // NOVO: Ref para identificar a primeira carga de dados válida
   const isFirstLoadRef = useRef(true);
-  // NOVO: Ref para o áudio silencioso (Keep Alive)
   const silentAudioRef = useRef<HTMLAudioElement | null>(null);
   
   if (notifiedPatientsRef.current === null) {
@@ -43,7 +38,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
       }
   }
 
-  // Função auxiliar para salvar no navegador quem já foi anunciado
   const markAsNotified = (id: string) => {
       const currentSet = notifiedPatientsRef.current;
       if (!currentSet) return;
@@ -51,7 +45,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
       currentSet.add(id);
       try {
           const arrayData = Array.from(currentSet);
-          // Limita o histórico para não estourar a memória do navegador (mantém os últimos 500)
           if (arrayData.length > 500) {
               const trimmed = arrayData.slice(-500);
               notifiedPatientsRef.current = new Set(trimmed);
@@ -64,7 +57,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
       }
   };
 
-  // PARSER DE DATA REFORÇADO v27 + v28 (System Timestamp)
   const parseDateRobust = (dateStr: string, timeStr?: string) => {
     try {
       if (!dateStr) return null;
@@ -128,15 +120,10 @@ const DashboardSection: React.FC<Props> = React.memo(({
   };
 
   const { triageList, internationList, isExtendedView } = useMemo(() => {
-     // 1. Process Triage Data
      const now = new Date();
      const msInHour = 60 * 60 * 1000;
      const standardWindow = 12 * msInHour; 
      const extendedWindow = 24 * msInHour;
-
-     // TIMEZONE FIX: Tolerância para fusos horários diferentes (Cuiabá é -1h em relação a Brasília)
-     // Permitimos registros que pareçam estar até 5 horas no "futuro" para compensar a diferença
-     // entre o relógio do servidor Google (GMT-3) e o cliente (GMT-4 ou outros).
      const TIMEZONE_BUFFER = 5 * msInHour; 
 
      const validTriageRows = reportData.map(row => {
@@ -158,7 +145,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
         return b._parsedDate.getTime() - a._parsedDate.getTime();
      };
 
-     // Filter Logic (Com buffer de Timezone aplicado)
      // @ts-ignore
      let triageFiltered = validTriageRows.filter(r => {
         // @ts-ignore
@@ -197,7 +183,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
 
   }, [reportData, internationData, lastDashboardUpdate]);
 
-  // Helper para extrair Protocolos da string de observação (Internação)
   const getProtocolsFromObs = (obs: string) => {
     if (!obs) return [];
     const matches = obs.match(/\[PROTOCOLO\s+([^\]]+)\]/g);
@@ -205,7 +190,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
     return matches.map(m => m.replace('[PROTOCOLO ', '').replace(']', ''));
   };
 
-  // Helper para detectar Protocolo na Triagem via discriminadores
   const detectTriageProtocolName = (discriminators: string) => {
     const d = (discriminators || '').toUpperCase();
     if (d.includes('SEPSE') || d.includes('INFECCAO') || d.includes('SIRS')) return 'Sepse';
@@ -215,62 +199,46 @@ const DashboardSection: React.FC<Props> = React.memo(({
     return null;
   };
 
-  // --- EFEITO: KEEP ALIVE AUDIO (BACKGROUND MODE) ---
   useEffect(() => {
     if (isAudioAlertEnabled) {
-        // Cria e toca um áudio silencioso em loop infinito.
-        // Isso força o navegador a tratar a aba como "Reproduzindo Mídia" (Igual YouTube),
-        // impedindo o congelamento da aba e da API de Voz (SpeechSynthesis) quando minimizado.
         if (!silentAudioRef.current) {
             const audio = new Audio(SILENT_AUDIO_URI);
             audio.loop = true;
-            audio.volume = 0.01; // Volume mínimo para ser considerado "ativo" pelo sistema
+            audio.volume = 0.01;
             silentAudioRef.current = audio;
         }
-        
         const playPromise = silentAudioRef.current.play();
         if (playPromise !== undefined) {
             playPromise.catch(error => {
-                console.warn("Autoplay bloqueado. O usuário precisa interagir com a página primeiro.", error);
+                console.warn("Autoplay bloqueado.", error);
             });
         }
     } else {
-        // Se desativar o alerta, pausa o Keep Alive para economizar recursos
         if (silentAudioRef.current) {
             silentAudioRef.current.pause();
         }
     }
-
     return () => {
-        if (silentAudioRef.current) {
-            silentAudioRef.current.pause();
-        }
+        if (silentAudioRef.current) silentAudioRef.current.pause();
     };
   }, [isAudioAlertEnabled]);
 
-  // --- ALERTA SONORO INTELIGENTE (LIMITADO AOS 2 ÚLTIMOS + IGNORA LOAD INICIAL) ---
   useEffect(() => {
-    // 1. COMBINAR AS LISTAS E ORDENAR POR DATA (Mais recentes primeiro)
     const combinedPatients = [
         ...triageList.map(p => ({ ...p, type: 'TRIAGE' })),
         ...internationList.map(p => ({ ...p, type: 'INTERNATION' }))
     ];
 
-    // Se não há pacientes, não faz nada
     if (combinedPatients.length === 0) return;
 
-    // Ordenação Decrescente de Data (Newest First)
     combinedPatients.sort((a, b) => {
         // @ts-ignore
         return b._parsedDate.getTime() - a._parsedDate.getTime();
     });
 
-    // 2. PEGAR APENAS OS TOP 2 (Evita falar todo mundo que está na tela)
     const topCandidates = combinedPatients.slice(0, 2);
 
-    // --- LÓGICA DE PRIMEIRA CARGA (SILENCIOSA) ---
     if (isFirstLoadRef.current) {
-        // Registra os pacientes iniciais como "já conhecidos nesta sessão" para não falar
         topCandidates.forEach(patient => {
             // @ts-ignore
             const rawId = patient.medicalRecord;
@@ -278,10 +246,8 @@ const DashboardSection: React.FC<Props> = React.memo(({
             const uniqueId = patient.type === 'INTERNATION' ? rawId + '_INT' : rawId;
             sessionKnownIdsRef.current.add(uniqueId);
         });
-        
-        // Marca que a primeira carga já aconteceu
         isFirstLoadRef.current = false;
-        return; // ENCERRA AQUI PARA NÃO FALAR
+        return;
     }
 
     if (!isAudioAlertEnabled) return;
@@ -291,7 +257,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
 
     const speak = (text: string) => {
         if ('speechSynthesis' in window) {
-            // Não cancela aqui para permitir fila se houver múltiplos alertas
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'pt-BR';
             window.speechSynthesis.speak(utterance);
@@ -299,36 +264,31 @@ const DashboardSection: React.FC<Props> = React.memo(({
     };
 
     topCandidates.forEach(patient => {
-         // ID único para controle
          // @ts-ignore
          const rawId = patient.medicalRecord;
          // @ts-ignore
          const uniqueId = patient.type === 'INTERNATION' ? rawId + '_INT' : rawId;
          
-         // 1. SE JÁ FOI NOTIFICADO NO PASSADO (localStorage), PULA
          if (notifiedSet.has(uniqueId)) return;
-
-         // 2. SE JÁ ESTAVA PRESENTE NO INICIO DA SESSÃO (Load Inicial), PULA
          if (sessionKnownIdsRef.current.has(uniqueId)) return;
 
          let alertMessage = '';
          let shouldNotify = false;
 
-         // Lógica Específica por Tipo
          // @ts-ignore
          if (patient.type === 'TRIAGE') {
-             // Check Protocolo (Prioridade)
              // @ts-ignore
              const protocolName = detectTriageProtocolName(patient.discriminators || '');
              if (protocolName) {
+                 // @ts-ignore
                  alertMessage = `Atenção. Paciente ${patient.name}. Possível protocolo de ${protocolName}.`;
                  shouldNotify = true;
              } else {
-                 // Check ESI Critico
                  // @ts-ignore
                  const esiStr = String(patient.esiLevel).replace(/\D/g, '');
                  const esi = parseInt(esiStr);
                  if (esi === 1 || esi === 2) {
+                     // @ts-ignore
                      alertMessage = `Atenção. Paciente ${patient.name}. Classificação ESI ${esi}.`;
                      shouldNotify = true;
                  }
@@ -340,13 +300,14 @@ const DashboardSection: React.FC<Props> = React.memo(({
              const protocols = getProtocolsFromObs(patient.observations || '');
              if (protocols.length > 0) {
                  const protoName = protocols[0].toLowerCase();
+                 // @ts-ignore
                  alertMessage = `Atenção. Paciente ${patient.name}. Possível protocolo de ${protoName}.`;
                  shouldNotify = true;
              } else {
-                 // Check NEWS Alto
                  // @ts-ignore
                  const score = parseInt(patient.newsScore) || 0;
                  if (score >= 5) {
+                     // @ts-ignore
                      alertMessage = `Atenção. Paciente ${patient.name}. Deterioração Clínica identificada.`;
                      shouldNotify = true;
                  }
@@ -355,8 +316,8 @@ const DashboardSection: React.FC<Props> = React.memo(({
 
          if (shouldNotify && alertMessage) {
              speak(alertMessage);
-             markAsNotified(uniqueId); // Salva no localStorage (Global)
-             sessionKnownIdsRef.current.add(uniqueId); // Salva na Sessão (Local)
+             markAsNotified(uniqueId);
+             sessionKnownIdsRef.current.add(uniqueId);
          }
     });
 
@@ -374,42 +335,35 @@ const DashboardSection: React.FC<Props> = React.memo(({
     }
   };
 
-  const getNewsColor = (scoreStr: any) => {
-     const score = parseInt(scoreStr) || 0;
-     if (score >= 5) return 'bg-rose-100 text-rose-700 border-rose-200';
-     if (score > 0) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  };
-
-  const getNewsBadge = (scoreStr: any) => {
+  const getNewsBadgeColor = (scoreStr: any) => {
     const score = parseInt(scoreStr) || 0;
-    if (score >= 7) return 'bg-rose-600 text-white'; // Critical
-    if (score >= 5) return 'bg-rose-500 text-white'; // High
-    if (score >= 1) return 'bg-yellow-400 text-slate-900'; // Medium
+    if (score >= 7) return 'bg-rose-500 text-white'; // Critical
+    if (score >= 5) return 'bg-amber-400 text-slate-900'; // High/Medium High (Yellow/Gold in image)
+    if (score >= 1) return 'bg-yellow-200 text-yellow-800'; // Medium
     return 'bg-emerald-500 text-white'; // Low
   };
 
-  // Formata o nome do protocolo para exibição amigável
-  const formatProtocolName = (rawName: string) => {
-    const n = rawName.toUpperCase().trim();
-    if (n === 'DORTORACICA') return 'DOR TORÁCICA';
-    if (n === 'DOR') return 'DOR INTENSA';
-    return n;
-  };
-
-  // Helper para separar discriminadores (string única separada por ;)
   const getDiscriminatorList = (discStr: string) => {
     if (!discStr) return [];
-    // Separa por ; e remove espaços extras
     return discStr.split(';').map(s => s.trim()).filter(s => s.length > 0);
   };
 
-  // --- SUB-COMPONENT: Vital Grid Item ---
   const VitalItem = ({ label, value, unit, alert = false }: { label: string, value: string, unit?: string, alert?: boolean }) => (
     <div className={`bg-white rounded p-1.5 shadow-sm flex flex-col justify-center items-center border ${alert ? 'border-rose-300 bg-rose-50' : 'border-slate-100'}`}>
         <span className="block text-[9px] text-slate-400 font-bold uppercase leading-tight">{label}</span>
         <span className={`leading-tight font-bold text-sm ${alert ? 'text-rose-700' : 'text-slate-700'}`}>{value || '-'}</span>
         {unit && <span className="block text-[8px] text-slate-400 font-normal leading-tight">{unit}</span>}
+    </div>
+  );
+
+  // New Component to match the skeleton image for Internation Vitals
+  const VitalBox = ({ label, value, unit, className = '' }: { label: string, value: string | React.ReactNode, unit?: string, className?: string }) => (
+    <div className={`flex flex-col items-center justify-center bg-white border border-slate-100 rounded-md p-2 h-20 shadow-sm ${className}`}>
+        <span className="text-[10px] text-slate-400 font-bold uppercase mb-1">{label}</span>
+        <div className="font-bold text-xl text-slate-800 leading-none mb-1">
+             {value || '-'}
+        </div>
+        <span className="text-[10px] text-slate-400 font-medium">{unit}</span>
     </div>
   );
 
@@ -431,9 +385,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
                         </span>
                     )}
                 </div>
-                <p className="text-[9px] text-indigo-300 italic">
-                  * Filtro Timezone: Tolerância de -5h para sincronia com Servidor/MT
-                </p>
             </div>
             <div className="text-right flex items-center gap-4">
                  <button 
@@ -479,7 +430,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                         <div>
                                             <h3 className="font-bold text-slate-800 text-lg leading-tight flex items-center gap-2">
                                                 {row.name}
-                                                {/* FLAG DE REAVALIAÇÃO */}
                                                 {String(row.isReevaluation).toUpperCase() === 'SIM' && (
                                                     <span className="bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-bold flex items-center gap-1">
                                                         <RefreshCw size={10} /> REAVALIAÇÃO
@@ -505,7 +455,6 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                         </div>
                                     ) : <div className="text-xs text-slate-400 italic mb-2">Sinais vitais não registrados</div>}
                                     
-                                    {/* ALERTS SECTION (Discriminators - Flag Preto) */}
                                     {row.discriminators && (
                                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                                             {getDiscriminatorList(row.discriminators).map((disc, idx) => (
@@ -529,7 +478,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                 </div>
             </div>
 
-            {/* COLUNA DIREITA: INTERNAÇÃO */}
+            {/* COLUNA DIREITA: INTERNAÇÃO (Design Atualizado Conforme Imagem) */}
             <div className="bg-slate-200/50 p-2 rounded-lg border border-slate-300 flex flex-col h-full overflow-hidden">
                 <div className="bg-emerald-600 text-white p-2 rounded-t-lg font-bold text-center uppercase tracking-wide text-sm flex items-center justify-center gap-2 shrink-0 shadow-sm">
                     <BedDouble size={16}/> INTERNAÇÃO
@@ -543,75 +492,69 @@ const DashboardSection: React.FC<Props> = React.memo(({
                         </div>
                     ) : (
                          internationList.map((row, i) => {
-                             const protocols = getProtocolsFromObs(row.observations || '');
-                             
+                             const score = parseInt(row.newsScore) || 0;
+                             const isHighRisk = score >= 5 || (row.riskText || '').toUpperCase().includes('POSSÍVEL DETERIORAÇÃO');
+
                              return (
-                                <div key={i} className="bg-white rounded-lg shadow-sm border-l-4 border-l-emerald-500 border border-slate-200 overflow-hidden relative">
-                                    <div className="p-3">
+                                <div key={i} className={`bg-white rounded-lg shadow-md border ${isHighRisk ? 'border-l-4 border-l-rose-500' : 'border border-slate-200'} overflow-hidden relative font-sans`}>
+                                    
+                                    <div className="p-4">
+                                        {/* Header Row: Name, Pront, Time, Badge */}
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
-                                                <h3 className="font-bold text-slate-800 text-lg leading-tight flex items-center gap-2">
+                                                <h3 className="font-bold text-slate-900 text-lg leading-tight mb-1">
                                                     {row.name}
-                                                    {/* FLAG DE REAVALIAÇÃO */}
-                                                    {String(row.isReevaluation).toUpperCase() === 'SIM' && (
-                                                        <span className="bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-bold flex items-center gap-1">
-                                                            <RefreshCw size={10} /> REAVALIAÇÃO
-                                                        </span>
-                                                    )}
                                                 </h3>
-                                                <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                                    PRONT: {row.medicalRecord} • <span className="font-bold text-slate-700">{row.evaluationTime}</span>
-                                                </p>
-                                                
-                                                {/* LOCALIZAÇÃO (SETOR / LEITO) EM DESTAQUE */}
-                                                {(row.sector || row.bed) && (
-                                                    <div className="mt-1.5 mb-0.5">
-                                                        <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">
-                                                            <BedDouble size={14} className="text-blue-600"/>
-                                                            {row.sector} &nbsp;•&nbsp; LEITO {row.bed}
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+                                                    <span>PRONT: {row.medicalRecord}</span>
+                                                    <span className="text-slate-300">•</span>
+                                                    <span>{row.evaluationTime}</span>
+                                                </div>
                                             </div>
-                                            <div className={`w-12 h-12 flex flex-col items-center justify-center rounded border shadow-sm ${getNewsBadge(row.newsScore)}`}>
-                                                <span className="text-[8px] font-bold uppercase leading-none mt-1 opacity-80">NEWS</span>
+                                            
+                                            {/* NEWS Badge (Top Right) */}
+                                            <div className={`px-3 py-2 rounded-md shadow-sm flex flex-col items-center justify-center min-w-[60px] ${getNewsBadgeColor(row.newsScore)}`}>
+                                                <span className="text-[10px] font-bold uppercase leading-none opacity-80">NEWS</span>
                                                 <span className="text-2xl font-black leading-none">{row.newsScore}</span>
                                             </div>
                                         </div>
+
+                                        {/* Location Pill */}
+                                        {(row.sector || row.bed) && (
+                                            <div className="mb-4 inline-block">
+                                                <div className="bg-blue-50 border border-blue-100 text-blue-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase flex items-center gap-1.5 shadow-sm">
+                                                    <BedDouble size={14}/>
+                                                    {row.sector || 'SETOR'} {row.bed ? `• LEITO ${row.bed}` : ''}
+                                                </div>
+                                            </div>
+                                        )}
                                         
+                                        {/* Vitals Grid (Box Style) */}
                                         {row.vitals ? (
-                                            <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded border border-slate-100 mb-2">
-                                                <VitalItem label="PA" value={`${row.vitals.pas}x${row.vitals.pad}`} unit="" />
-                                                <VitalItem label="FC" value={row.vitals.fc} unit="bpm" />
-                                                <VitalItem label="FR" value={row.vitals.fr} unit="irpm" />
-                                                <VitalItem label="TEMP" value={row.vitals.temp} unit="°C" />
-                                                <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" />
-                                                <VitalItem label="O2" value={row.vitals.o2Sup} />
+                                            <div className="grid grid-cols-6 gap-2 mb-4">
+                                                <VitalBox label="PA" value={`${row.vitals.pas}x${row.vitals.pad}`} unit="" className="col-span-1" />
+                                                <VitalBox label="FC" value={row.vitals.fc} unit="bpm" />
+                                                <VitalBox label="FR" value={row.vitals.fr} unit="irpm" />
+                                                <VitalBox label="TEMP" value={row.vitals.temp} unit="°C" />
+                                                <VitalBox label="SPO2" value={row.vitals.spo2} unit="%" />
+                                                <VitalBox label="O2" value={row.vitals.o2Sup} unit="" />
                                             </div>
                                         ) : <div className="text-xs text-slate-400 italic mb-2">Sinais vitais não registrados</div>}
                                         
-                                        {/* ALERTS SECTION (NEWS Risk) */}
-                                        <div className={`text-[10px] p-1.5 rounded flex items-start gap-1 font-bold uppercase ${getNewsColor(row.newsScore)}`}>
-                                            <Info size={12} className="shrink-0 mt-0.5"/>
-                                            <span>{row.riskText || 'Sem Classificação'}</span>
-                                        </div>
-                                        
-                                        {/* PROTOCOLS SECTION (Flags Pretas) - COM PISCA PISCA */}
-                                        {protocols.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5 mt-2">
-                                                {protocols.map((p, idx) => (
-                                                    <span key={idx} className="bg-slate-900 text-white text-[10px] px-2 py-1 rounded font-bold uppercase inline-flex items-center gap-1.5 animate-pulse border border-slate-700 shadow-sm max-w-full">
-                                                        <AlertTriangle size={12} className="text-yellow-400 shrink-0"/>
-                                                        <span className="whitespace-normal text-left leading-tight">{formatProtocolName(p)}</span>
-                                                    </span>
-                                                ))}
+                                        {/* Alert Banner (Full Width) */}
+                                        {isHighRisk && (
+                                            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 flex items-center gap-3 mb-2 animate-pulse">
+                                                <AlertTriangle className="text-yellow-600 shrink-0" size={20} />
+                                                <span className="text-sm font-bold text-yellow-800 uppercase tracking-wide">
+                                                    POSSÍVEL DETERIORAÇÃO CLÍNICA
+                                                </span>
                                             </div>
                                         )}
 
-                                        {/* Observações relevantes - QUEBRA DE TEXTO ATIVADA */}
+                                        {/* Observations (Bottom Italic) */}
                                         {row.observations && (
-                                            <div className="mt-1 text-[9px] text-slate-500 italic border-t border-slate-100 pt-1 whitespace-normal break-words leading-tight">
-                                                Obs: {row.observations}
+                                            <div className="text-[11px] text-slate-500 italic mt-1 leading-tight">
+                                                Obs: {row.observations.replace(/\[.*?\]/g, '').trim()}
                                             </div>
                                         )}
                                     </div>
