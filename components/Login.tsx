@@ -2,8 +2,14 @@ import React, { useState } from 'react';
 import { Activity, User, Mail, Lock, KeyRound, CheckCircle2, AlertTriangle, Settings, X, Database } from 'lucide-react';
 import { fetchWithRetry } from '../utils/api'; // Novo Import
 
+interface UserSession {
+  name: string;
+  email: string;
+  sector?: string;
+}
+
 interface LoginProps {
-  onLogin: (userData: { name: string; email: string }) => void;
+  onLogin: (userData: UserSession) => void;
   scriptUrl: string;
 }
 
@@ -48,7 +54,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, scriptUrl: initialScriptU
         setTimeout(() => {
             onLogin({
                 name: 'Wanderson de Souza Sales',
-                email: 'wanderson.sales@redemedical.com.br'
+                email: 'wanderson.sales@redemedical.com.br',
+                sector: 'Administração'
             });
         }, 1000); 
         return;
