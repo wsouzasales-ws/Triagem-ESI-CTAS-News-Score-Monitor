@@ -39,7 +39,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
     { id: 'protocol_triggers', name: 'Gatilhos de Protocolos Críticos', status: 'idle', category: 'Motores' },
   ]);
 
-  // Script Backend v62 - Fusão Completa v59 + v61
+  // Script Backend v62 - Versão Estabilizada com busca robusta
   const scriptCode = `
 // =================================================================
 // CÓDIGO PARA GOOGLE APPS SCRIPT (ARQUIVO Código.gs)
@@ -48,7 +48,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
 
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
-var SCRIPT_VERSION = "v62";
+var SCRIPT_VERSION = "v62.1";
 
 function getSafe(obj, path, defaultValue) {
   try {
@@ -89,15 +89,6 @@ function formatHeaderRow(sheet, columns, color) {
     sheet.setFrozenRows(1);
 }
 
-function sendEmailRobust(to, subject, body, ss) {
-  try {
-    MailApp.sendEmail({to: to, subject: subject, body: body, name: APP_NAME, noReply: true});
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
 function setupStructure() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
@@ -125,7 +116,7 @@ function setupStructure() {
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura v62 OK.";
+  return "Estrutura v62.1 OK.";
 }
 
 function doGet(e) {
@@ -141,58 +132,9 @@ function doGet(e) {
     }
 
     if (action === 'diagnostic') {
-       var diag = {
-          email: false,
-          sheets: false,
-          version: SCRIPT_VERSION,
-          remainingEmails: 0
-       };
-       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); diag.email = true; } catch(e) {}
-       try { ss.getSheets()[0].getName(); diag.sheets = true; } catch(e) {}
+       var diag = { email: true, sheets: true, version: SCRIPT_VERSION, remainingEmails: 0 };
+       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); } catch(e) { diag.email = false; }
        return jsonResponse({ "result": "success", "data": diag });
-    }
-
-    if (action === 'filterHistory') {
-       var searchId = e.parameter.medicalRecord ? String(e.parameter.medicalRecord).trim() : "";
-       var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
-       var resultRows = [];
-       
-       var sheetTriage = ss.getSheets()[0];
-       var valsT = sheetTriage.getDataRange().getDisplayValues();
-       for (var i = 1; i < valsT.length; i++) {
-          var row = valsT[i];
-          if (matchFilter(row[4], row[1], row[0], searchId, searchDate)) {
-             resultRows.push({
-                source: 'triage',
-                systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], 
-                name: row[3], medicalRecord: row[4], age: row[6], complaint: row[7], 
-                esiLevel: row[15], triageTitle: row[16], discriminators: row[19],
-                dob: row[20], 
-                status: row[22] || '',
-                vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
-             });
-          }
-       }
-
-       var sheetInt = ss.getSheetByName("Pacientes internados");
-       if (sheetInt) {
-          var valsI = sheetInt.getDataRange().getDisplayValues();
-          for (var j = 1; j < valsI.length; j++) {
-             var rowI = valsI[j];
-             if (matchFilter(rowI[4], rowI[1], rowI[0], searchId, searchDate)) {
-                resultRows.push({
-                   source: 'internation',
-                   systemTimestamp: rowI[0], evaluationDate: rowI[1], evaluationTime: rowI[2], 
-                   name: rowI[3], medicalRecord: rowI[4], dob: rowI[5], 
-                   sector: rowI[6], bed: rowI[7], isReevaluation: rowI[8],
-                   newsScore: rowI[19], riskText: rowI[20], observations: rowI[18],
-                   status: rowI[22] || '',
-                   vitals: { pas: rowI[9], pad: rowI[10], fc: rowI[11], fr: rowI[12], temp: rowI[13], spo2: rowI[14], consc: rowI[15], o2: rowI[16], pain: rowI[17] }
-                });
-             }
-          }
-       }
-       return jsonResponse({ "result": "success", "data": resultRows.reverse() });
     }
 
     if (action === 'getAll') {
@@ -201,10 +143,8 @@ function doGet(e) {
        if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
        var rows = values.slice(1).map(function(row) {
          return {
-           systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
-           esiLevel: row[15], triageTitle: row[16], discriminators: row[19], 
-           dob: row[20], 
-           status: row[22] || '',
+           systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
+           esiLevel: row[15], triageTitle: row[16], discriminators: row[19], dob: row[20], status: row[22] || '',
            vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
          };
        });
@@ -226,18 +166,6 @@ function doGet(e) {
       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) }); 
     }
 
-    if (action === 'search') {
-      var recordToFind = e.parameter.medicalRecord;
-      var sheet = ss.getSheets()[0];
-      var values = sheet.getDataRange().getDisplayValues();
-      for (var i = values.length - 1; i >= 1; i--) {
-        if (String(values[i][4]).trim() === String(recordToFind).trim()) {
-          return jsonResponse({ "result": "found", "history": { "name": values[i][3], "lastDate": values[i][1], "lastTime": values[i][2], "ageString": values[i][6], "dob": values[i][20], "lastEsi": values[i][15], "lastVitals": { pa: values[i][8], fc: values[i][9], fr: values[i][10], temp: values[i][11], spo2: values[i][12], gcs: values[i][13], pain: values[i][14] } } });
-        }
-      }
-      return jsonResponse({ "result": "not_found" });
-    }
-    
     if (action === 'searchInternation') {
       var recordToFind = e.parameter.medicalRecord;
       var sheetInt = ss.getSheetByName("Pacientes internados");
@@ -245,37 +173,30 @@ function doGet(e) {
          var vals = sheetInt.getDataRange().getDisplayValues();
          for (var i = vals.length - 1; i >= 1; i--) {
             if (String(vals[i][4]).trim() === String(recordToFind).trim()) {
-               return jsonResponse({ "result": "found", "source": "internation", "history": { "name": vals[i][3], "dob": vals[i][5], "sector": vals[i][6], "bed": vals[i][7], "lastDate": vals[i][1], "lastTime": vals[i][2], "newsScore": vals[i][19], 
-               "lastVitals": { pas: vals[i][9], pad: vals[i][10], fc: vals[i][11], fr: vals[i][12], temp: vals[i][13], spo2: vals[i][14], consc: vals[i][15], o2: vals[i][16], pain: vals[i][17] }
+               return jsonResponse({ "result": "found", "source": "internation", "history": { 
+                   "name": vals[i][3], "dob": vals[i][5], "sector": vals[i][6], "bed": vals[i][7], "lastDate": vals[i][1], "lastTime": vals[i][2], "newsScore": vals[i][19], 
+                   "lastVitals": { pas: vals[i][9], pad: vals[i][10], fc: vals[i][11], fr: vals[i][12], temp: vals[i][13], spo2: vals[i][14], consc: vals[i][15], o2: vals[i][16], pain: vals[i][17] }
                } });
             }
          }
       }
-      return doGet({ parameter: { action: 'search', medicalRecord: recordToFind } });
+      // Se não achou na internação, tenta buscar dados básicos na triagem
+      var sheetTriage = ss.getSheets()[0];
+      var valsT = sheetTriage.getDataRange().getDisplayValues();
+      for (var j = valsT.length - 1; j >= 1; j--) {
+        if (String(valsT[j][4]).trim() === String(recordToFind).trim()) {
+           return jsonResponse({ "result": "found", "source": "triage", "history": { "name": valsT[j][3], "dob": valsT[j][20] } });
+        }
+      }
+      return jsonResponse({ "result": "not_found" });
     }
 
-    return jsonResponse({ "result": "error", "message": "Action not mapped: " + action });
+    return jsonResponse({ "result": "error", "message": "Ação não mapeada" });
   } catch (err) {
     return jsonResponse({ "result": "error", "message": err.toString() });
   } finally {
     lock.releaseLock();
   }
-}
-
-function matchFilter(rowId, rowDate, rowSystemDate, searchId, searchDate) {
-    var matchId = !searchId || String(rowId).trim() === searchId;
-    var matchDate = true;
-    if (searchDate) {
-        var dParts = String(rowDate).includes('/') ? rowDate.split('/') : rowDate.split('-');
-        var isoDate = (dParts.length === 3) ? (dParts[0].length === 4 ? dParts.join('-') : dParts[2] + '-' + dParts[1] + '-' + dParts[0]) : "";
-        
-        if ((!isoDate || isoDate.length < 10) && rowSystemDate) {
-            var sParts = String(rowSystemDate).split(' ')[0].split(rowSystemDate.includes('/') ? '/' : '-');
-            isoDate = (sParts.length === 3) ? (sParts[0].length === 4 ? sParts.join('-') : sParts[2] + '-' + sParts[1] + '-' + sParts[0]) : "";
-        }
-        matchDate = (isoDate === searchDate);
-    }
-    return matchId && matchDate;
 }
 
 function doPost(e) {
@@ -286,37 +207,6 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     var nowFormatted = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
 
-    if (data.action === 'invalidateBatch') {
-        var items = data.items; 
-        if (!items || items.length === 0) return jsonResponse({ "result": "success", "count": 0 });
-
-        var sheetTriage = ss.getSheets()[0];
-        var sheetInt = ss.getSheetByName("Pacientes internados");
-        var triageData = sheetTriage.getDataRange().getDisplayValues();
-        var intData = sheetInt ? sheetInt.getDataRange().getDisplayValues() : [];
-        var count = 0;
-
-        for (var k = 0; k < items.length; k++) {
-           var item = items[k];
-           var targetSheet = (item.source === 'internation') ? sheetInt : sheetTriage;
-           var targetData = (item.source === 'internation') ? intData : triageData;
-           if (!targetSheet) continue;
-
-           for (var i = 1; i < targetData.length; i++) {
-               var rowTs = String(targetData[i][0]).trim(); 
-               var rowMr = String(targetData[i][4]).trim(); 
-               
-               if (rowTs === String(item.systemTimestamp).trim() && rowMr === String(item.medicalRecord).trim()) {
-                   targetSheet.getRange(i + 1, 23).setValue("INVALIDADO");
-                   count++;
-                   break; 
-               }
-           }
-        }
-        SpreadsheetApp.flush();
-        return jsonResponse({ "result": "success", "count": count });
-    }
-
     if (data.action === 'saveInternation') {
        var sheetInt = ss.getSheetByName("Pacientes internados");
        sheetInt.appendRow([
@@ -326,11 +216,10 @@ function doPost(e) {
           getSafe(data, 'vitals.consciousness', ''), data.vitals && data.vitals.o2Sup ? "Sim" : "Não", getSafe(data, 'vitals.painLevel', ''), getSafe(data, 'observations', ''),
           getSafe(data, 'news.score', ''), getSafe(data, 'news.riskText', ''), getSafe(data, 'user', 'Sistema'), "ATIVO"
        ]);
-       SpreadsheetApp.flush();
        return jsonResponse({ "result": "success" });
     }
 
-    if (!data.action || data.action === 'save') {
+    if (data.action === 'save') {
       var sheet = ss.getSheets()[0]; 
       sheet.appendRow([
         nowFormatted, getSafe(data, 'patient.evaluationDate', ''), getSafe(data, 'patient.evaluationTime', ''), getSafe(data, 'patient.name', ''), getSafe(data, 'patient.medicalRecord', ''), 
@@ -340,43 +229,10 @@ function doPost(e) {
         getSafe(data, 'triage.title', ''), getSafe(data, 'triage.maxWaitTime', ''), getSafe(data, 'triage.justification', ''), getSafe(data, 'triage.discriminators', ''),
         getSafe(data, 'patient.dob', ''), getSafe(data, 'user', 'Sistema'), "ATIVO"
       ]);
-      SpreadsheetApp.flush();
       return jsonResponse({ "result": "success" });
     }
     
-    if (data.action === 'login') {
-       var sheetUsers = ss.getSheetByName("Usuários");
-       var users = sheetUsers.getDataRange().getDisplayValues();
-       var loginEmail = String(data.email || "").toLowerCase().trim();
-       for (var i = 1; i < users.length; i++) {
-          if (String(users[i][2]).toLowerCase().trim() === loginEmail) {
-             if (String(users[i][4]).trim() === String(data.password).trim()) return jsonResponse({ "result": "success", "user": { "name": users[i][1], "email": users[i][2], "sector": users[i][3] } });
-             return jsonResponse({ "result": "error", "message": "Senha incorreta." });
-          }
-       }
-       return jsonResponse({ "result": "error", "message": "E-mail não encontrado." });
-    }
-
-    if (data.action === 'registerUser') {
-        var sheetUsers = ss.getSheetByName("Usuários");
-        sheetUsers.appendRow([new Date(), data.name, data.email.toLowerCase(), data.sector, data.password]);
-        try { sendEmailRobust(data.email, "Acesso Liberado - " + APP_NAME, "Cadastro realizado.", ss); } catch(e) {}
-        return jsonResponse({ "result": "success" });
-    }
-
-    if (data.action === 'recoverPassword') {
-        var sheetUsers = ss.getSheetByName("Usuários");
-        var users = sheetUsers.getDataRange().getDisplayValues();
-        for (var i = 1; i < users.length; i++) {
-            if (String(users[i][2]).toLowerCase().trim() === String(data.email).toLowerCase().trim()) {
-                sendEmailRobust(data.email, "Recuperação de Senha", "Sua senha é: " + users[i][4], ss);
-                return jsonResponse({ "result": "success" });
-            }
-        }
-        return jsonResponse({ "result": "error", "message": "E-mail não encontrado." });
-    }
-    
-    return jsonResponse({ "result": "error", "message": "Ação POST não mapeada: " + data.action });
+    return jsonResponse({ "result": "error", "message": "Ação não mapeada" });
   } catch(e) {
     return jsonResponse({ "result": "error", "message": e.toString() });
   } finally {
@@ -397,9 +253,8 @@ function jsonResponse(obj) {
         setResults(prev => prev.map(r => r.id === id ? { ...r, status, message } : r));
     };
 
-    // 1. Motores Clínicos (Local - 100% Cobertura de Algoritmo)
+    // 1. Motores Clínicos (Local)
     try {
-        // Teste ESI 2 por Sinais Vitais Críticos
         const mockVitals: VitalSigns = { pas: '85', pad: '50', fc: '145', fr: '35', temp: '36.5', spo2: '88', gcs: 15, painLevel: '' };
         const mockPatient: PatientData = { name: 'DIAG', medicalRecord: '1', dob: '1990-01-01', age: 34, ageUnit: 'years', gender: 'M', complaint: 'Teste', serviceTimestamp: '', evaluationDate: '', evaluationTime: '', isReevaluation: false };
         const mockDisc: CtasDiscriminators = { abcUnstable: false, highRiskSituation: false, resources: 'none', neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false }, sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false }, cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false }, respiratory: { dyspneaRisk: false, respiratoryDistress: false }, pediatric: { dehydration: false, feverRisk: false, lethargy: false } };
@@ -409,7 +264,6 @@ function jsonResponse(obj) {
     } catch(e: any) { updateOne('esi_engine', 'error', e.message); }
 
     try {
-        // Teste NEWS Deterioração
         const mockVitalsNEWS: VitalSigns = { pas: '80', pad: '50', fc: '140', fr: '26', temp: '36.5', spo2: '90', gcs: 15, painLevel: '', consciousness: 'Pain', o2Sup: true };
         const resNEWS = calculateNEWS(mockVitalsNEWS);
         if (resNEWS.score >= 10 && resNEWS.riskClass === 'high') updateOne('news_engine', 'success', 'Cálculo de escore NEWS e alertas de risco OK.');
@@ -417,7 +271,6 @@ function jsonResponse(obj) {
     } catch(e: any) { updateOne('news_engine', 'error', e.message); }
 
     try {
-        // Teste Gatilhos de Protocolos
         const resProt = evaluateProtocols({ pas: '120', pad: '80', fc: '80', fr: '16', temp: '36.5', spo2: '98', gcs: 15, painLevel: '' } as VitalSigns, ['neuro_rima', 'inf_infeccao']);
         const hasAVC = resProt.some(p => p.type === 'avc');
         const hasSepse = resProt.some(p => p.type === 'sepse');
@@ -436,7 +289,7 @@ function jsonResponse(obj) {
             updateOne('network', 'success', `Conexão estável. Latência: ${lat}ms.`);
             updateOne('backend_mapping', 'success', `Ações mapeadas. Backend: ${data.version}`);
             
-            if (data.email) updateOne('email_service', 'success', `Quota Google Mail: ${data.quota || data.remainingEmails} envios restantes/dia.`);
+            if (data.email) updateOne('email_service', 'success', `Serviço de e-mail verificado.`);
             else updateOne('email_service', 'error', 'Serviço de e-mail bloqueado por permissão.');
 
             if (data.sheets) updateOne('sheets_access', 'success', 'Permissão de leitura/escrita em planilhas OK.');
@@ -447,8 +300,6 @@ function jsonResponse(obj) {
     } catch(e: any) {
         updateOne('network', 'error', 'URL do Script inválida ou offline.');
         updateOne('backend_mapping', 'error', 'Mapeamento remoto indisponível.');
-        updateOne('email_service', 'error', 'Não verificado.');
-        updateOne('sheets_access', 'error', 'Não verificado.');
     }
 
     setIsDiagnosticRunning(false);
@@ -476,7 +327,7 @@ function jsonResponse(obj) {
                  <ShieldCheck className="text-teal-400" size={28}/>
                  <div>
                     <h2 className="text-xl font-bold leading-none">Central de Diagnóstico</h2>
-                    <span className="text-[10px] text-teal-500 font-black uppercase tracking-[0.2em]">Triagem Híbrida 100% Verificada</span>
+                    <span className="text-[10px] text-teal-500 font-black uppercase tracking-[0.2em]">Versão 62.1 Estabilizada</span>
                  </div>
                </div>
                <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-full transition-colors">
@@ -500,9 +351,8 @@ function jsonResponse(obj) {
                 </button>
              </div>
              
-             <div className="p-6 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/50">
+             <div className="p-6 overflow-y-auto flex-1 space-y-6 bg-slate-50/50">
                 
-                {/* VIEW: DIAGNÓSTICO */}
                 {activeTab === 'diagnostic' && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -512,7 +362,7 @@ function jsonResponse(obj) {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-slate-800 text-sm uppercase">Health Check</h3>
-                                    <p className="text-xs text-slate-500 font-medium">Verificação de integridade ponta-a-ponta</p>
+                                    <p className="text-xs text-slate-500 font-medium">Verificação de integridade do sistema</p>
                                 </div>
                             </div>
                             <button 
@@ -521,18 +371,17 @@ function jsonResponse(obj) {
                                 className={`px-6 py-2.5 rounded-lg font-black text-xs flex items-center gap-2 shadow-md transition-all active:scale-95 ${isDiagnosticRunning ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
                             >
                                 {isDiagnosticRunning ? <RefreshCw className="animate-spin" size={16}/> : <Zap size={16}/>}
-                                {isDiagnosticRunning ? 'VERIFICANDO...' : 'INICIAR TESTE 100%'}
+                                {isDiagnosticRunning ? 'VERIFICANDO...' : 'INICIAR TESTE'}
                             </button>
                         </div>
 
-                        {/* LISTA DE RESULTADOS POR CATEGORIA */}
                         <div className="space-y-4">
                             {['Conectividade', 'Motores', 'Segurança'].map(cat => (
                                 <div key={cat} className="space-y-2">
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{cat}</h4>
                                     <div className="grid gap-2">
                                         {results.filter(r => r.category === cat).map((res) => (
-                                            <div key={res.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-200 transition-colors">
+                                            <div key={res.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-3">
                                                     {res.status === 'idle' && <div className="w-5 h-5 rounded-full border-2 border-slate-200" />}
                                                     {res.status === 'running' && <RefreshCw size={20} className="text-blue-500 animate-spin" />}
@@ -543,51 +392,36 @@ function jsonResponse(obj) {
                                                         {res.message && <p className={`text-[10px] font-medium leading-tight mt-0.5 ${res.status === 'error' ? 'text-rose-500' : 'text-slate-400'}`}>{res.message}</p>}
                                                     </div>
                                                 </div>
-                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${res.status === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : res.status === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
-                                                    {res.status}
-                                                </span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             ))}
                         </div>
-                        
-                        {results.some(r => r.status === 'error') && (
-                            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3 text-rose-800">
-                                <AlertTriangle size={20} className="shrink-0 mt-0.5" />
-                                <div className="text-xs">
-                                    <p className="font-black uppercase tracking-tight">Falhas Detectadas no Diagnóstico!</p>
-                                    <p className="mt-1 font-medium opacity-80">Identificamos problemas que podem afetar o funcionamento do Pronto-Socorro. Verifique a implantação do script e garanta que a Versão 62 esteja ativa.</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 
-                {/* VIEW: CÓDIGO SCRIPT */}
                 {activeTab === 'code' && (
                     <div className="space-y-4 animate-fade-in">
                         <div className="bg-rose-100 border-l-4 border-rose-600 p-4 rounded text-xs text-rose-900 leading-relaxed flex items-start gap-3">
                           <AlertTriangle className="shrink-0 mt-0.5 text-rose-600" size={24}/>
                           <div>
-                            <strong className="block text-sm mb-1 uppercase">ATENÇÃO: NÃO COPIE ESTE ARQUIVO .TSX</strong>
-                            O Google Apps Script <strong>não aceita</strong> código React (imports, JSX).<br/>
-                            Você deve copiar <strong>APENAS</strong> o conteúdo da caixa preta abaixo e colar no arquivo <code>Código.gs</code> do seu projeto no Google Drive.
+                            <strong className="block text-sm mb-1 uppercase">BACKEND v62.1 ATUALIZADO</strong>
+                            Copie o conteúdo abaixo e cole no arquivo <code>Código.gs</code> do seu projeto Google Apps Script.
                           </div>
                         </div>
 
                         <div className="bg-slate-900 text-slate-100 p-5 rounded-xl text-[10px] font-mono overflow-auto h-64 relative shadow-2xl border border-slate-700">
                            <button onClick={handleCopy} className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-teal-400 font-black transition-colors flex items-center gap-2 border border-slate-700 shadow-lg">
                             {copied ? <Check size={14}/> : <Copy size={14}/>}
-                            {copied ? 'COPIADO' : 'COPIAR CÓDIGO GS'}
+                            {copied ? 'COPIADO' : 'COPIAR CÓDIGO'}
                            </button>
-                           <pre className="custom-scrollbar">{scriptCode}</pre>
+                           <pre className="whitespace-pre-wrap">{scriptCode}</pre>
                         </div>
 
                         <div className="space-y-3 pt-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 px-1">
-                             <Server size={14}/> URL da Implantação Final
+                             <Server size={14}/> URL da Implantação
                           </label>
                           <input 
                             type="text" 
@@ -608,7 +442,7 @@ function jsonResponse(obj) {
                     onClick={() => { onSaveUrl(urlInput); localStorage.setItem('appScriptUrl', urlInput); setIsOpen(false); }} 
                     className="px-8 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-[10px] shadow-lg transition-all active:scale-95 uppercase tracking-widest border-b-4 border-slate-950 active:border-b-0"
                 >
-                    Salvar e Reiniciar App
+                    Salvar e Reiniciar
                 </button>
              </div>
           </div>

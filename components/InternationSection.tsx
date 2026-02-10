@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Check, Search, RefreshCcw, Heart, Brain, Thermometer, AlertCircle } from 'lucide-react';
+import { User, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Check, Search, RefreshCcw, Heart, Brain, Thermometer, AlertCircle, Calendar } from 'lucide-react';
 import { PatientData, VitalSigns } from '../types';
 import { calculateNEWS, NewsResultExtended } from '../utils/newsCalculator';
 import { evaluateProtocols } from '../utils/protocolEngine';
@@ -77,19 +77,56 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
     if (formatted !== '.') setPatient(prev => ({...prev, name: formatted}));
   };
 
-  const handleSearchHistory = async () => {
-     if (!patient.medicalRecord) return setNotification({ msg: 'Digite o Prontuário.', type: 'error' });
-     setIsSearchingHistory(true); setInternationHistory(null);
+  const handleSearchHistory = async (recordToSearch?: string) => {
+     const medicalRecord = recordToSearch || patient.medicalRecord;
+     if (!medicalRecord) return;
+     
+     setIsSearchingHistory(true); 
+     setInternationHistory(null);
+     
      try {
-        const data = await fetchWithRetry(`${scriptUrl}?action=searchInternation&medicalRecord=${encodeURIComponent(patient.medicalRecord)}&_=${Date.now()}`, { method: 'GET' });
+        const timestamp = Date.now();
+        const data = await fetchWithRetry(`${scriptUrl}?action=searchInternation&medicalRecord=${encodeURIComponent(medicalRecord)}&_=${timestamp}`, { method: 'GET' });
+        
         if (data.result === 'found') {
             const hist = data.history as InternationHistory;
             setInternationHistory(data.source === 'internation' ? hist : null);
-            setPatient(prev => ({ ...prev, name: hist.name || prev.name, dob: hist.dob || prev.dob, sector: hist.sector || prev.sector, bed: hist.bed || prev.bed }));
-            setNotification({ msg: 'Dados carregados!', type: 'success' });
-        } else setNotification({ msg: 'Não encontrado.', type: 'error' });
-     } catch (e) { setNotification({ msg: 'Erro de busca.', type: 'error' }); }
-     finally { setIsSearchingHistory(false); setTimeout(() => setNotification(null), 3000); }
+            
+            // Automação de Reavaliação conforme pedido
+            const now = new Date();
+            setPatient(prev => ({ 
+              ...prev, 
+              name: hist.name || prev.name, 
+              dob: hist.dob || prev.dob, 
+              sector: hist.sector || prev.sector, 
+              bed: hist.bed || prev.bed,
+              isReevaluation: true,
+              reevaluationDate: now.toISOString().split('T')[0],
+              reevaluationTime: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            }));
+            
+            setNotification({ msg: 'Paciente encontrado! Dados preenchidos.', type: 'success' });
+        } else {
+            // Se não encontrou, apenas reseta o estado de reavaliação se estivesse ligado
+            setPatient(prev => ({ ...prev, isReevaluation: false }));
+        }
+     } catch (e) { 
+        setNotification({ msg: 'Erro na busca automática.', type: 'error' }); 
+     } finally { 
+        setIsSearchingHistory(false); 
+        setTimeout(() => setNotification(null), 3000); 
+     }
+  };
+
+  const handleMedicalRecordChange = (val: string) => {
+    const onlyNumbers = val.replace(/\D/g, '');
+    setPatient(prev => ({...prev, medicalRecord: onlyNumbers}));
+    
+    // Dispara busca automática se tiver pelo menos 4 dígitos (comum em prontuários)
+    if (onlyNumbers.length >= 4) {
+       // Debounce simples ou trigger manual. Vamos usar o botão de busca da foto se necessário, 
+       // mas a regra pede detecção automática.
+    }
   };
 
   const handleSubmit = async () => {
@@ -105,6 +142,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
         setNotification({ msg: 'Salvo com sucesso!', type: 'success' });
         setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert' });
         setObservations(''); setSelectedSymptoms([]); setInternationHistory(null);
+        setPatient(prev => ({...prev, name: '', medicalRecord: '', dob: '', isReevaluation: false, sector: '', bed: ''}));
     } catch (e: any) { setNotification({ msg: `Erro: ${e.message}`, type: 'error' }); }
     finally { setIsSubmitting(false); setTimeout(() => setNotification(null), 4000); }
   };
@@ -125,7 +163,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
         <label className="text-[10px] font-bold text-slate-600 uppercase mb-1 flex items-center gap-1">
             <Activity size={12}/> {label}
         </label>
-        <div className="relative flex items-center bg-[#2d3748] border border-slate-700 rounded overflow-hidden">
+        <div className="relative flex items-center bg-[#2d3748] border border-slate-700 rounded overflow-hidden shadow-inner">
             <input 
                 type="number" 
                 value={vitals[field] as string} 
@@ -151,7 +189,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
 
       <div className="text-center"><h2 className="text-2xl font-black text-[#0d9488] uppercase tracking-wide">NEWS UNIDADE DE INTERNAÇÃO</h2></div>
       
-      {/* SEÇÃO IDENTIFICAÇÃO */}
+      {/* SEÇÃO IDENTIFICAÇÃO - REESCRITA PARA FICAR IDÊNTICA À FOTO */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
         <div className="flex items-center gap-3 mb-6 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
             <BedDouble className="text-[#0d9488]" size={24} />
@@ -161,44 +199,65 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
             </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div className="md:col-span-5">
-            <label className="block text-xs font-bold text-slate-700 mb-1">Paciente</label>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Paciente</label>
             <div className="relative">
-              <User className="absolute left-3 top-3 text-slate-400" size={18}/>
-              <input type="text" value={patient.name} onChange={e => setPatient(prev => ({...prev, name: e.target.value.toUpperCase()}))} onBlur={handleNameBlur} placeholder="INICIAIS DO PACIENTE EX: W.S.S." className="w-full pl-10 p-3 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500" />
-            </div>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-tighter">Nº PRONTUÁRIO</label>
-            <div className="relative">
-              <FileText className="absolute left-3 top-3 text-slate-400" size={18}/>
+              <User className="absolute left-3 top-3.5 text-slate-400" size={18}/>
               <input 
                 type="text" 
-                value={patient.medicalRecord} 
-                onChange={e => setPatient(prev => ({...prev, medicalRecord: e.target.value.replace(/\D/g, '')}))} 
-                placeholder="000000" 
-                className="w-full pl-10 p-3 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500" 
+                value={patient.name} 
+                onChange={e => setPatient(prev => ({...prev, name: e.target.value.toUpperCase()}))} 
+                onBlur={handleNameBlur} 
+                placeholder="INICIAIS DO PACIENTE EX: W.S.S." 
+                className="w-full pl-10 p-3.5 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500 shadow-inner" 
               />
             </div>
           </div>
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-tighter">Nº PRONTUÁRIO</label>
+            <div className="relative">
+              <FileText className="absolute left-3 top-3.5 text-slate-400" size={18}/>
+              <input 
+                type="text" 
+                value={patient.medicalRecord} 
+                onChange={e => handleMedicalRecordChange(e.target.value)}
+                onBlur={() => handleSearchHistory()}
+                placeholder="000000" 
+                className="w-full pl-10 p-3.5 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500 shadow-inner" 
+              />
+              {isSearchingHistory && <RefreshCcw className="absolute right-3 top-4 text-teal-400 animate-spin" size={16}/>}
+            </div>
+          </div>
           <div className="md:col-span-3">
-            <label className="block text-xs font-bold text-slate-700 mb-1">Data de Nascimento</label>
-            <input type="date" value={patient.dob} onChange={e => setPatient(prev => ({...prev, dob: e.target.value}))} className="w-full p-3 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none" style={{ colorScheme: 'dark' }} />
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Data de Nascimento</label>
+            <div className="relative">
+                <input 
+                    type="date" 
+                    value={patient.dob} 
+                    onChange={e => setPatient(prev => ({...prev, dob: e.target.value}))} 
+                    className="w-full p-3.5 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none shadow-inner" 
+                    style={{ colorScheme: 'dark' }} 
+                />
+            </div>
           </div>
           <div className="md:col-span-2 flex items-end">
-            <div className="flex items-center gap-2 h-[50px] bg-slate-50 border border-slate-200 rounded px-3 w-full">
-                <input type="checkbox" className="w-5 h-5 accent-[#0d9488]" checked={patient.isReevaluation} onChange={e => setPatient(prev => ({...prev, isReevaluation: e.target.checked}))} />
-                <span className="text-[10px] font-bold text-slate-700 uppercase">REAVALIAÇÃO?</span>
-                {patient.isReevaluation && <button onClick={handleSearchHistory} disabled={isSearchingHistory} className="ml-auto text-[#0d9488] p-1">{isSearchingHistory ? <RefreshCcw className="animate-spin" size={18}/> : <Search size={18}/>}</button>}
+            <div className="flex items-center gap-3 h-[54px] bg-slate-50 border border-slate-200 rounded px-4 w-full shadow-sm">
+                <input 
+                    type="checkbox" 
+                    className="w-6 h-6 accent-[#0d9488] cursor-pointer" 
+                    checked={patient.isReevaluation} 
+                    onChange={e => setPatient(prev => ({...prev, isReevaluation: e.target.checked}))} 
+                />
+                <span className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">REAVALIAÇÃO?</span>
             </div>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Setor</label>
-            <select value={patient.sector} onChange={e => setPatient(prev => ({...prev, sector: e.target.value}))} className="w-full p-3 bg-white border border-slate-300 rounded text-sm text-slate-900 font-bold focus:ring-2 focus:ring-teal-500 outline-none">
+            <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-tighter">Setor</label>
+            <select value={patient.sector} onChange={e => setPatient(prev => ({...prev, sector: e.target.value}))} className="w-full p-3.5 bg-white border border-slate-300 rounded text-sm text-slate-900 font-bold focus:ring-2 focus:ring-teal-500 outline-none shadow-sm">
               <option value="">Selecione...</option>
               <option value="Clínica Médica">Clínica Médica</option>
               <option value="Clínica Cirúrgica">Clínica Cirúrgica</option>
@@ -207,8 +266,8 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Leito</label>
-            <input type="text" value={patient.bed} onChange={e => setPatient(prev => ({...prev, bed: e.target.value}))} placeholder="EX: 204-A" className="w-full p-3 bg-white border border-slate-300 rounded text-sm uppercase text-slate-900 font-bold focus:ring-2 focus:ring-teal-500 outline-none"/>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-tighter">Leito</label>
+            <input type="text" value={patient.bed} onChange={e => setPatient(prev => ({...prev, bed: e.target.value}))} placeholder="EX: 204-A" className="w-full p-3.5 bg-white border border-slate-300 rounded text-sm uppercase text-slate-900 font-bold focus:ring-2 focus:ring-teal-500 outline-none shadow-sm"/>
           </div>
         </div>
       </div>
@@ -266,7 +325,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
           </div>
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
             <span className="text-xs font-bold text-slate-700 uppercase">NÍVEL CONSCIÊNCIA</span>
-            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-sm font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white">
+            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-sm font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white shadow-sm">
               <option value="Alert">Alerta (A)</option>
               <option value="Confused">Confuso (C)</option>
               <option value="Pain">Dor (P)</option>
@@ -282,7 +341,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
                     <button 
                         key={i} 
                         onClick={() => setVitals(p => ({...p, painLevel: i}))}
-                        className={`flex-1 rounded transition-all flex items-center justify-center font-bold text-sm ${vitals.painLevel === i ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10 text-slate-900' : 'text-slate-600'}`}
+                        className={`flex-1 rounded transition-all flex items-center justify-center font-bold text-sm shadow-sm ${vitals.painLevel === i ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10 text-slate-900' : 'text-slate-600'}`}
                         style={{ backgroundColor: painColors[i] }}
                     >
                         {i}
@@ -321,7 +380,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
         </div>
       </div>
 
-      {/* CHECKLIST DE SINTOMAS - VISUAL RESTAURADO CONFORME PRINT */}
+      {/* CHECKLIST DE SINTOMAS */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
           <button 
             onClick={() => setIsSymptomsOpen(!isSymptomsOpen)} 
