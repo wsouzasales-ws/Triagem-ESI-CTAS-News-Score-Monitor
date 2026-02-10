@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Check, Search, RefreshCcw, Heart, Brain, Thermometer, AlertCircle } from 'lucide-react';
 import { PatientData, VitalSigns } from '../types';
@@ -174,7 +173,13 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-tighter">Nº PRONTUÁRIO</label>
             <div className="relative">
               <FileText className="absolute left-3 top-3 text-slate-400" size={18}/>
-              <input type="text" value={patient.medicalRecord} onChange={e => setPatient(prev => ({...prev, medicalRecord: e.target.value}))} placeholder="000000" className="w-full pl-10 p-3 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500" />
+              <input 
+                type="text" 
+                value={patient.medicalRecord} 
+                onChange={e => setPatient(prev => ({...prev, medicalRecord: e.target.value.replace(/\D/g, '')}))} 
+                placeholder="000000" 
+                className="w-full pl-10 p-3 bg-[#2d3748] border border-slate-700 rounded text-white font-bold outline-none placeholder:text-slate-500" 
+              />
             </div>
           </div>
           <div className="md:col-span-3">

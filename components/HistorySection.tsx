@@ -111,47 +111,28 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     
     try {
       const timestamp = Date.now();
-      const [triageRes, internationRes] = await Promise.all([
-        fetchWithRetry(`${scriptUrl}?action=getAll&_=${timestamp}`, { method: 'GET' }),
-        fetchWithRetry(`${scriptUrl}?action=getAllInternation&_=${timestamp}`, { method: 'GET' })
-      ]);
+      const data = await fetchWithRetry(`${scriptUrl}?action=filterHistory&medicalRecord=${encodeURIComponent(searchId)}&_=${timestamp}`, { method: 'GET' });
 
-      let allRows: any[] = [];
-      if (triageRes.result === 'success') {
-        allRows = [...allRows, ...triageRes.data.map((r: any) => ({ ...r, source: 'triage' }))];
+      if (data.result === 'success') {
+        let allRows = data.data || [];
+        if (filterMode === '24h') {
+          const now = new Date();
+          allRows = allRows.filter((r: any) => {
+            const d = parseDateRobust(r.systemTimestamp || r.evaluationDate, r.evaluationTime);
+            return d && (now.getTime() - d.getTime() <= 86400000);
+          });
+        } else if (filterMode === 'range' && dateRange.start && dateRange.end) {
+          const start = new Date(`${dateRange.start}T00:00:00`);
+          const end = new Date(`${dateRange.end}T23:59:59`);
+          allRows = allRows.filter((r: any) => {
+            const d = parseDateRobust(r.systemTimestamp || r.evaluationDate, r.evaluationTime);
+            return d && d >= start && d <= end;
+          });
+        }
+        setHistoryData(allRows);
       }
-      if (internationRes.result === 'success') {
-        allRows = [...allRows, ...internationRes.data.map((r: any) => ({ ...r, source: 'internation' }))];
-      }
-
-      if (searchId.trim()) {
-        allRows = allRows.filter(r => String(r.medicalRecord).trim() === searchId.trim());
-      }
-
-      const now = new Date();
-      if (filterMode === '24h') {
-        allRows = allRows.filter(r => {
-          const d = parseDateRobust(r.systemTimestamp || r.evaluationDate, r.evaluationTime);
-          return d && (now.getTime() - d.getTime() <= 86400000);
-        });
-      } else if (filterMode === 'range' && dateRange.start && dateRange.end) {
-        const start = new Date(`${dateRange.start}T00:00:00`);
-        const end = new Date(`${dateRange.end}T23:59:59`);
-        allRows = allRows.filter(r => {
-          const d = parseDateRobust(r.systemTimestamp || r.evaluationDate, r.evaluationTime);
-          return d && d >= start && d <= end;
-        });
-      }
-
-      allRows.sort((a, b) => {
-        const dA = parseDateRobust(a.systemTimestamp || a.evaluationDate, a.evaluationTime);
-        const dB = parseDateRobust(b.systemTimestamp || b.evaluationDate, b.evaluationTime);
-        return (dB?.getTime() || 0) - (dA?.getTime() || 0);
-      });
-
-      setHistoryData(allRows);
     } catch (error) {
-      setErrorMessage("Erro ao carregar histórico unificado.");
+      setErrorMessage("Erro ao carregar histórico.");
     } finally {
       setIsLoading(false);
       setSearched(true);
@@ -183,10 +164,10 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
      setShowDeleteModal(false);
      setIsInvalidating(true); 
      const itemsToInvalidate = filteredData.filter(row => selectedItems.has(getRowKey(row))).map(row => ({ systemTimestamp: row.systemTimestamp, medicalRecord: row.medicalRecord, source: row.source }));
-     const updatedData = historyData.map(row => selectedItems.has(getRowKey(row)) ? { ...row, status: 'INVALIDADO' } : row);
-     setHistoryData(updatedData);
-     setSelectedItems(new Set()); 
-     fetchWithRetry(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'invalidateBatch', items: itemsToInvalidate }) }).catch(err => console.error("Erro ao invalidar:", err)).finally(() => setIsInvalidating(false));
+     fetchWithRetry(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'invalidateBatch', items: itemsToInvalidate }) })
+     .then(() => handleSearch())
+     .catch(err => console.error("Erro ao invalidar:", err))
+     .finally(() => setIsInvalidating(false));
   };
 
   const handleExportExcel = () => {
@@ -210,13 +191,12 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     // @ts-ignore
     XLSX.utils.book_append_sheet(wb, ws, "Histórico");
     // @ts-ignore
-    XLSX.writeFile(wb, `Historico_Acolhimento_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(wb, `Historico_${new Date().getTime()}.xlsx`);
   };
 
   const handleExportPDF = () => {
     if (filteredData.length === 0) return;
     setIsGeneratingListPdf(true);
-    // Usamos timeout para garantir que o React sincronizou o DOM no container oculto
     setTimeout(() => {
       const element = document.getElementById('history-pdf-content');
       if (!element) {
@@ -232,7 +212,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       };
       // @ts-ignore
       window.html2pdf().set(opt).from(element).save().then(() => setIsGeneratingListPdf(false)).catch(() => setIsGeneratingListPdf(false));
-    }, 1200);
+    }, 1500);
   };
 
   const handlePrintIndividual = (row: any) => {
@@ -245,9 +225,9 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
         ? { pas: row.vitals?.pas, pad: row.vitals?.pad, fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.painLevel }
         : { pas: row.vitals?.pa?.split('x')[0] || '', pad: row.vitals?.pa?.split('x')[1] || '', fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.pain };
       const mappedResult = {
-          level: (parseInt(row.esiLevel) || 5) as any, color: row.source === 'internation' ? 'bg-slate-800' : '',
-          score: row.newsScore, riskText: row.riskText, title: row.source === 'internation' ? `NEWS ${row.newsScore}` : row.triageTitle || `ESI ${row.esiLevel}`,
-          maxWaitTime: row.source === 'internation' ? '-' : '', justification: [], discriminators: []
+          level: (parseInt(row.esiLevel) || 5) as any, score: row.newsScore, riskText: row.riskText, 
+          title: row.source === 'internation' ? `NEWS ${row.newsScore}` : `ESI ${row.esiLevel}`,
+          maxWaitTime: '-', justification: [], discriminators: []
       };
       setPrintingRow({ patient: mappedPatient, vitals: mappedVitals, triageResult: mappedResult, source: row.source });
       setTimeout(() => {
@@ -273,20 +253,19 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
 
   const getNewsBadge = (scoreStr: any) => {
     const score = parseInt(scoreStr) || 0;
-    if (score >= 7) return 'bg-red-800 text-white animate-pulse';
+    if (score >= 7) return 'bg-red-800 text-white';
     if (score >= 5) return 'bg-red-600 text-white';
     if (score >= 1) return 'bg-yellow-400 text-black';
     return 'bg-emerald-600 text-white';
   };
 
-  // Cores hexadecimais explícitas para garantir compatibilidade com html2canvas
   const getBadgeColorHex = (row: any) => {
       if (row.source === 'internation') {
           const score = parseInt(row.newsScore) || 0;
-          if (score >= 7) return '#991b1b'; // Dark Red
-          if (score >= 5) return '#dc2626'; // Red
-          if (score >= 1) return '#facc15'; // Yellow
-          return '#10b981'; // Green
+          if (score >= 7) return '#991b1b';
+          if (score >= 5) return '#dc2626';
+          if (score >= 1) return '#facc15';
+          return '#059669';
       } else {
           const level = String(row.esiLevel).replace(/\D/g, '');
           switch(level) {
@@ -303,10 +282,9 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   return (
     <div className="space-y-6 animate-fade-in pb-20 relative">
       {isGeneratingListPdf && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-center text-white">
+        <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center text-white">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-teal-500 border-t-transparent mb-4"></div>
-            <h2 className="text-xl font-bold uppercase tracking-widest">Sincronizando dados no PDF...</h2>
-            <p className="text-slate-400 text-xs mt-2">Aguarde a geração do arquivo consolidado.</p>
+            <h2 className="text-xl font-bold uppercase tracking-widest text-center">Gereando Relatório de Histórico...<br/><span className="text-xs font-normal text-slate-400 mt-2 block">Não feche a página</span></h2>
         </div>
       )}
 
@@ -318,29 +296,39 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
           </div>
       )}
 
-      {/* PDF LISTA CONTAINER - MELHORADO: Posicionamento fixo com visibilidade total para captura */}
-      <div style={{ position: 'fixed', left: '-5000px', top: 0, width: '1060px', backgroundColor: 'white', zIndex: -500 }}>
-        <div id="history-pdf-content" style={{ width: '1060px', backgroundColor: 'white', padding: '30px' }}>
+      {/* PDF LISTA CONTAINER - MELHORADO: Posicionamento fixo com visibilidade total para captura pelo html2canvas */}
+      <div style={{ position: 'fixed', left: '-6000px', top: 0, width: '1060px', backgroundColor: 'white', zIndex: -1000 }}>
+        <div id="history-pdf-content" style={{ width: '1060px', backgroundColor: 'white', padding: '40px' }}>
              <div className="flex justify-between items-center border-b-4 border-slate-100 pb-4 mb-6">
                 <TriageHybridLogo />
                 <div className="text-center">
-                    <h2 className="text-[26px] font-black text-slate-800 uppercase tracking-[0.2em] mb-1">HISTÓRICO DE ATENDIMENTO</h2>
-                    <div className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">Relatório Consolidado • Hospital São Mateus</div>
+                    <h2 className="text-[26px] font-black text-slate-900 uppercase tracking-[0.2em] mb-1">HISTÓRICO DE ATENDIMENTO</h2>
+                    <div className="text-[11px] text-slate-500 font-bold tracking-widest uppercase">Relatório Gerencial • Hospital São Mateus Cuiabá</div>
                 </div>
                 <SaoMateusLogo />
              </div>
              
-             <table className="w-full text-left text-[10px] border-collapse" style={{ tableLayout: 'auto' }}>
+             <table className="w-full text-left text-[10px] border-collapse" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '100px' }} />
+                    <col style={{ width: '80px' }} />
+                    <col style={{ width: '180px' }} />
+                    <col style={{ width: '100px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '200px' }} />
+                    <col style={{ width: '235px' }} />
+                </colgroup>
                 <thead className="bg-slate-100 text-slate-900 font-black uppercase">
                     <tr>
-                        <th className="p-2 border border-slate-300 w-[80px]">Origem</th>
-                        <th className="p-2 border border-slate-300 w-[110px]">Data Nasc.</th>
-                        <th className="p-2 border border-slate-300 w-[80px]">Pront.</th>
-                        <th className="p-2 border border-slate-300">Paciente</th>
-                        <th className="p-2 border border-slate-300 w-[100px]">Avaliação</th>
-                        <th className="p-2 border border-slate-300 text-center w-[85px]">Classif.</th>
-                        <th className="p-2 border border-slate-300 w-[180px]">SSVV</th>
-                        <th className="p-2 border border-slate-300 w-[240px]">Obs / Queixa</th>
+                        <th className="p-3 border border-slate-300">Origem</th>
+                        <th className="p-3 border border-slate-300">Data Nasc.</th>
+                        <th className="p-3 border border-slate-300 text-center">Pront.</th>
+                        <th className="p-3 border border-slate-300">Paciente</th>
+                        <th className="p-3 border border-slate-300">Avaliação</th>
+                        <th className="p-3 border border-slate-300 text-center">Classif.</th>
+                        <th className="p-3 border border-slate-300">SSVV</th>
+                        <th className="p-3 border border-slate-300">Obs / Queixa</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -351,31 +339,31 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                           : `PA: ${row.vitals?.pa} | FC: ${row.vitals?.fc} | FR: ${row.vitals?.fr} | T: ${row.vitals?.temp} | SpO2: ${row.vitals?.spo2}% | Dor: ${row.vitals?.pain || '-'}`;
                       
                       return (
-                        <tr key={idx} className={row.status === 'INVALIDADO' ? 'opacity-30' : ''}>
-                            <td className="p-2 border border-slate-200 font-bold text-slate-800">{row.source === 'internation' ? 'INTERN.' : 'TRIAGEM'}</td>
-                            <td className="p-2 border border-slate-200 text-slate-800">{formatDate(row.dob)}</td>
-                            <td className="p-2 border border-slate-200 font-mono font-bold text-slate-800">{row.medicalRecord}</td>
-                            <td className="p-2 border border-slate-200 font-bold uppercase text-slate-900">{row.name}</td>
-                            <td className="p-2 border border-slate-200 text-slate-800">{row.evaluationDate} {row.evaluationTime}</td>
-                            <td className="p-2 border border-slate-200 text-center">
-                                <div style={{ backgroundColor: badgeColor, color: (badgeColor === '#facc15' ? '#000' : '#fff'), padding: '4px 2px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', width: '70px', margin: '0 auto' }}>
+                        <tr key={idx} className={row.status === 'INVALIDADO' ? 'opacity-25' : ''}>
+                            <td className="p-3 border border-slate-200 font-bold text-slate-900">{row.source === 'internation' ? 'INTERN.' : 'TRIAGEM'}</td>
+                            <td className="p-3 border border-slate-200 text-slate-900">{formatDate(row.dob)}</td>
+                            <td className="p-3 border border-slate-200 font-mono font-bold text-slate-900 text-center">{row.medicalRecord}</td>
+                            <td className="p-3 border border-slate-200 font-black uppercase text-slate-900 leading-tight">{row.name}</td>
+                            <td className="p-3 border border-slate-200 text-slate-900">{row.evaluationDate} {row.evaluationTime}</td>
+                            <td className="p-3 border border-slate-200 text-center">
+                                <div style={{ backgroundColor: badgeColor, color: (badgeColor === '#facc15' ? '#000' : '#fff'), padding: '4px 0', borderRadius: '4px', fontWeight: '900', fontSize: '9px', width: '70px', margin: '0 auto' }}>
                                     {row.source === 'internation' ? `NEWS ${row.newsScore}` : `ESI ${String(row.esiLevel).replace(/\D/g,'')}`}
                                 </div>
                             </td>
-                            <td className="p-2 border border-slate-200 font-mono text-[8px] leading-tight text-slate-700">{vitalsStr}</td>
-                            <td className="p-2 border border-slate-200 text-[8px] leading-tight text-slate-600 italic">{row.source === 'internation' ? row.observations : row.complaint}</td>
+                            <td className="p-3 border border-slate-200 font-mono text-[8px] leading-tight text-slate-800">{vitalsStr}</td>
+                            <td className="p-3 border border-slate-200 text-[8px] leading-snug text-slate-700 font-medium">{row.source === 'internation' ? row.observations : row.complaint}</td>
                         </tr>
                       );
                     })}
                 </tbody>
              </table>
-             <div className="mt-8 flex justify-between items-end border-t pt-4">
-                 <div className="text-[8px] text-slate-400 font-bold uppercase">
-                     Relatório gerado em: {new Date().toLocaleString('pt-BR')} | Hospital São Mateus Cuiabá
+             <div className="mt-12 flex justify-between items-end border-t-2 border-slate-200 pt-6">
+                 <div className="text-[9px] text-slate-500 font-bold uppercase">
+                     Relatório gerado automaticamente em: {new Date().toLocaleString('pt-BR')}
                  </div>
                  <div className="text-center">
-                     <div className="w-52 border-b border-slate-400 mb-1"></div>
-                     <div className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Assinatura do Profissional</div>
+                     <div className="w-56 border-b border-slate-400 mb-1"></div>
+                     <div className="text-[8px] font-black text-slate-800 uppercase tracking-widest">Assinatura e Carimbo do Responsável</div>
                  </div>
              </div>
         </div>
@@ -453,7 +441,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                         <th className="p-3 border-b">Origem</th>
                         <th className="p-3 border-b">Avaliação / Registro</th>
                         <th className="p-3 border-b">Turno</th>
-                        <th className="p-3 border-b">Prontuário</th>
+                        <th className="p-3 border-b text-center">Pront.</th>
                         <th className="p-3 border-b">Data Nasc.</th>
                         <th className="p-3 border-b">Paciente</th>
                         <th className="p-3 border-b text-center">Classificação</th>
@@ -484,7 +472,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                               <td className="p-3">
                                   {isDayShift ? <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">DIURNO</span> : <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">NOTURNO</span>}
                               </td>
-                              <td className={`p-3 font-bold text-slate-700 ${isInvalid ? 'line-through' : ''}`}>{row.medicalRecord}</td>
+                              <td className={`p-3 font-bold text-slate-700 text-center ${isInvalid ? 'line-through' : ''}`}>{row.medicalRecord}</td>
                               <td className={`p-3 font-bold text-slate-600 ${isInvalid ? 'line-through' : ''}`}>{formatDate(row.dob)}</td>
                               <td className={`p-3 font-bold text-slate-700 ${isInvalid ? 'line-through' : ''}`}>
                                   <div className="text-slate-800 uppercase tracking-tight">{row.name}</div>

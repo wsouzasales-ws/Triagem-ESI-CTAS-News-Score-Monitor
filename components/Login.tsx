@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Activity, User, Mail, Lock, KeyRound, CheckCircle2, AlertTriangle, Settings, X, Database } from 'lucide-react';
-import { fetchWithRetry } from '../utils/api'; // Novo Import
+import { fetchWithRetry } from '../utils/api';
 
 interface UserSession {
   name: string;
@@ -180,10 +180,12 @@ export const Login: React.FC<LoginProps> = ({ onLogin, scriptUrl: initialScriptU
       <div className="w-20 h-20 bg-slate-50 border-2 border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
         <Activity size={40} className="text-rose-600" />
       </div>
-      <h1 className="text-2xl font-bold text-slate-800 uppercase tracking-wide text-center flex flex-col items-center gap-1">
-        <span>Triagem Híbrida <span className="text-rose-600">ESI + CTAS</span></span>
-        <span className="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-black tracking-widest border border-emerald-200">
-           + NEWS Score
+      <h1 className="text-2xl font-black text-slate-800 uppercase tracking-wide text-center flex flex-col items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-center">
+           <span>TRIAGEM HÍBRIDA</span> <span className="text-rose-600">ESI + CTAS</span>
+        </div>
+        <span className="text-xs bg-emerald-100 text-emerald-800 px-4 py-1 rounded-full font-black tracking-widest border border-emerald-200 shadow-sm mt-1">
+           + NEWS SCORE
         </span>
       </h1>
       <p className="text-slate-400 text-sm mt-3 font-medium">Sistema de Acolhimento e Classificação de Risco</p>
