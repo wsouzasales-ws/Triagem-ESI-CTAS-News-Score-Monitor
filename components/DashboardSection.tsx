@@ -144,11 +144,13 @@ const DashboardSection: React.FC<Props> = React.memo(({
     return matches ? matches.map(m => m.replace('[PROTOCOLO ', '').replace(']', '')) : [];
   };
 
-  const cleanObservations = (obs: string) => {
-      if (!obs) return '';
-      // Remove tags de protocolo e sintomas para exibição limpa se desejado, ou mantem tudo.
-      // O usuário pediu para aparecer as observações.
-      return obs.replace(/\[PROTOCOLO[^\]]+\]/g, '').trim(); 
+  const cleanObservations = (obs: string, hgt?: string) => {
+      let clean = obs ? obs.replace(/\[PROTOCOLO[^\]]+\]/g, '').trim() : '';
+      if (hgt && hgt.trim()) {
+          const hgtText = `DEXTRO: ${hgt.trim()} mg/dL`;
+          clean = clean ? `${clean} | ${hgtText}` : hgtText;
+      }
+      return clean;
   };
 
   const detectTriageProtocolName = (discriminators: string) => {
@@ -259,8 +261,8 @@ const DashboardSection: React.FC<Props> = React.memo(({
                     {triageList.map((row, i) => {
                         const level = parseInt(String(row.esiLevel).replace(/\D/g,'')) || 5;
                         const isCritical = level <= 2;
-                        // dob is now properly defined in SheetRowData interface
                         const dob = row.dob; 
+                        const obsDisplay = cleanObservations(row.complaint, row.vitals?.hgt);
 
                         return (
                             <div key={i} className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden relative border-l-[6px] ${isCritical ? 'border-l-red-600 ring-2 ring-red-100' : 'border-l-orange-400'}`}>
@@ -288,10 +290,10 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                         <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" />
                                         <VitalItem label="DOR" value={row.vitals.pain} />
                                     </div>}
-                                    {row.complaint && (
+                                    {obsDisplay && (
                                         <div className="mt-2 bg-yellow-50 text-yellow-900 p-1.5 rounded border border-yellow-200 text-[10px] font-bold uppercase flex items-center gap-1.5">
                                             <Info size={12} className="shrink-0 text-yellow-600"/> 
-                                            <span className="truncate">{row.complaint}</span>
+                                            <span className="truncate">{obsDisplay}</span>
                                         </div>
                                     )}
                                     {row.discriminators && <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -313,7 +315,7 @@ const DashboardSection: React.FC<Props> = React.memo(({
                         const protocols = getProtocolsFromObs(row.observations || '');
                         const score = parseInt(row.newsScore) || 0;
                         const isDeteriorating = score >= 5 || (row.riskText || '').toUpperCase().includes('POSSÍVEL');
-                        const obsDisplay = cleanObservations(row.observations || '');
+                        const obsDisplay = cleanObservations(row.observations || '', row.vitals?.hgt);
 
                         return (
                             <div key={i} className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden relative border-l-[6px] ${isDeteriorating ? 'border-l-red-600 ring-2 ring-red-100 bg-red-50/20' : 'border-l-emerald-500'}`}>

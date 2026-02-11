@@ -182,7 +182,8 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
       'Paciente': row.name, 
       'Avaliação': `${row.evaluationDate} ${row.evaluationTime}`,
       'Classificação': row.source === 'internation' ? `NEWS ${row.newsScore}` : `ESI ${row.esiLevel}`,
-      'Obs/Queixa': row.source === 'internation' ? row.observations : row.complaint 
+      'Obs/Queixa': row.source === 'internation' ? row.observations : row.complaint,
+      'Dextro': row.vitals?.hgt ? `${row.vitals.hgt} mg/dL` : '-'
     }));
     // @ts-ignore
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -216,14 +217,18 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
   };
 
   const handlePrintIndividual = (row: any) => {
+      const obsWithHgt = row.vitals?.hgt 
+        ? `${row.source === 'internation' ? row.observations : row.complaint} | DEXTRO: ${row.vitals.hgt} mg/dL`
+        : (row.source === 'internation' ? row.observations : row.complaint);
+
       const mappedPatient = {
           name: row.name, medicalRecord: row.medicalRecord, dob: row.dob || '', age: 0, ageUnit: 'years' as any, gender: 'M' as any,
-          complaint: row.source === 'internation' ? row.observations : row.complaint, serviceTimestamp: '',
+          complaint: obsWithHgt, serviceTimestamp: '',
           evaluationDate: row.evaluationDate, evaluationTime: row.evaluationTime, isReevaluation: false, sector: row.sector, bed: row.bed
       };
       const mappedVitals = row.source === 'internation' 
-        ? { pas: row.vitals?.pas, pad: row.vitals?.pad, fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.painLevel }
-        : { pas: row.vitals?.pa?.split('x')[0] || '', pad: row.vitals?.pa?.split('x')[1] || '', fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.pain };
+        ? { pas: row.vitals?.pas, pad: row.vitals?.pad, fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.painLevel, hgt: row.vitals?.hgt }
+        : { pas: row.vitals?.pa?.split('x')[0] || '', pad: row.vitals?.pa?.split('x')[1] || '', fc: row.vitals?.fc, fr: row.vitals?.fr, temp: row.vitals?.temp, spo2: row.vitals?.spo2, gcs: 15, painLevel: row.vitals?.pain, hgt: row.vitals?.hgt };
       const mappedResult = {
           level: (parseInt(row.esiLevel) || 5) as any, score: row.newsScore, riskText: row.riskText, 
           title: row.source === 'internation' ? `NEWS ${row.newsScore}` : `ESI ${row.esiLevel}`,
@@ -296,7 +301,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
           </div>
       )}
 
-      {/* PDF LISTA CONTAINER - MELHORADO: Posicionamento fixo com visibilidade total para captura pelo html2canvas */}
+      {/* PDF LISTA CONTAINER */}
       <div style={{ position: 'fixed', left: '-6000px', top: 0, width: '1060px', backgroundColor: 'white', zIndex: -1000 }}>
         <div id="history-pdf-content" style={{ width: '1060px', backgroundColor: 'white', padding: '40px' }}>
              <div className="flex justify-between items-center border-b-4 border-slate-100 pb-4 mb-6">
@@ -338,6 +343,9 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                           ? `PA: ${row.vitals?.pas}x${row.vitals?.pad} | FC: ${row.vitals?.fc} | FR: ${row.vitals?.fr} | T: ${row.vitals?.temp} | SpO2: ${row.vitals?.spo2}% | Dor: ${row.vitals?.painLevel || '-'}`
                           : `PA: ${row.vitals?.pa} | FC: ${row.vitals?.fc} | FR: ${row.vitals?.fr} | T: ${row.vitals?.temp} | SpO2: ${row.vitals?.spo2}% | Dor: ${row.vitals?.pain || '-'}`;
                       
+                      const obsDisplay = row.source === 'internation' ? row.observations : row.complaint;
+                      const hgtDisplay = row.vitals?.hgt ? ` | DEXTRO: ${row.vitals.hgt} mg/dL` : '';
+
                       return (
                         <tr key={idx} className={row.status === 'INVALIDADO' ? 'opacity-25' : ''}>
                             <td className="p-3 border border-slate-200 font-bold text-slate-900">{row.source === 'internation' ? 'INTERN.' : 'TRIAGEM'}</td>
@@ -351,7 +359,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                                 </div>
                             </td>
                             <td className="p-3 border border-slate-200 font-mono text-[8px] leading-tight text-slate-800">{vitalsStr}</td>
-                            <td className="p-3 border border-slate-200 text-[8px] leading-snug text-slate-700 font-medium">{row.source === 'internation' ? row.observations : row.complaint}</td>
+                            <td className="p-3 border border-slate-200 text-[8px] leading-snug text-slate-700 font-medium">{obsDisplay}{hgtDisplay}</td>
                         </tr>
                       );
                     })}
@@ -455,6 +463,9 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                         const isInvalid = row.status === 'INVALIDADO';
                         const isSelected = selectedItems.has(getRowKey(row));
                         const isDayShift = checkShift(row.evaluationTime, 'day');
+                        const hgtText = row.vitals?.hgt ? ` | DEXTRO: ${row.vitals.hgt} mg/dL` : '';
+                        const obsDisplay = row.source === 'internation' ? row.observations : row.complaint;
+
                         return (
                           <tr key={idx} className={`transition-colors ${isInvalid ? 'bg-slate-100/50 opacity-60 grayscale' : 'hover:bg-slate-50'} ${isSelected ? 'bg-teal-50' : ''}`}>
                               <td className="p-3 text-center">
@@ -497,7 +508,7 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
                                   )}
                               </td>
                               <td className={`p-3 text-xs text-slate-500 max-w-[200px] truncate whitespace-normal ${isInvalid ? 'line-through' : ''}`}>
-                                  {row.source === 'internation' ? row.observations : row.complaint}
+                                  {obsDisplay}{hgtText}
                               </td>
                               <td className="p-3 text-center">
                                   <button onClick={() => handlePrintIndividual(row)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors shadow-sm" title="Imprimir Relatório Individual">

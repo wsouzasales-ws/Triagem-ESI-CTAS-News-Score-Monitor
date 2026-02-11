@@ -39,7 +39,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
     { id: 'protocol_triggers', name: 'Gatilhos de Protocolos Críticos', status: 'idle', category: 'Motores' },
   ]);
 
-  // Script Backend v62 - Versão Estabilizada com busca robusta
+  // Script Backend v62.2 - Mesclado (Login/Auth + HGT Support)
   const scriptCode = `
 // =================================================================
 // CÓDIGO PARA GOOGLE APPS SCRIPT (ARQUIVO Código.gs)
@@ -48,7 +48,7 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
 
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
-var SCRIPT_VERSION = "v62.1";
+var SCRIPT_VERSION = "v62.2";
 
 function getSafe(obj, path, defaultValue) {
   try {
@@ -89,15 +89,25 @@ function formatHeaderRow(sheet, columns, color) {
     sheet.setFrozenRows(1);
 }
 
+function sendEmailRobust(to, subject, body, ss) {
+  try {
+    MailApp.sendEmail({to: to, subject: subject, body: body, name: APP_NAME, noReply: true});
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function setupStructure() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
   var sheetPatients = ss.getSheets()[0];
   if (sheetPatients.getName() !== "Pacientes") sheetPatients.setName("Pacientes");
+  // Adicionado coluna HGT no final (index 23)
   var headersPatients = [
       "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Reavaliação?", "Idade", "Queixa", "PA", "FC", "FR", "Temp", "SpO2", "GCS", "Dor", 
-      "ESI Level", "Classificação", "Tempo Alvo", "Justificativa", "Discriminadores", "Data Nascimento", "Usuário Resp.", "Status"
+      "ESI Level", "Classificação", "Tempo Alvo", "Justificativa", "Discriminadores", "Data Nascimento", "Usuário Resp.", "Status", "HGT"
   ];
   ensureHeader(sheetPatients, headersPatients, "#d9ead3");
 
@@ -108,15 +118,16 @@ function setupStructure() {
   
   var sheetInternation = ss.getSheetByName("Pacientes internados");
   if (!sheetInternation) sheetInternation = ss.insertSheet("Pacientes internados");
+  // Adicionado coluna HGT no final (index 23)
   var headersInternation = [
       "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Data Nascimento", "Setor", "Leito", "Reavaliação?",
       "PAS", "PAD", "FC", "FR", "Temp", "SpO2", "Consciencia", "O2 Suplementar", "Dor",
-      "Obs", "NEWS Score", "Risco NEWS", "Usuário Resp.", "Status"
+      "Obs", "NEWS Score", "Risco NEWS", "Usuário Resp.", "Status", "HGT"
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura v62.1 OK.";
+  return "Estrutura v62.2 OK.";
 }
 
 function doGet(e) {
@@ -128,13 +139,57 @@ function doGet(e) {
     
     if (!action) {
        setupStructure();
-       return jsonResponse({ "result": "success", "message": "Script v62 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v62.2 Online" });
     }
 
     if (action === 'diagnostic') {
-       var diag = { email: true, sheets: true, version: SCRIPT_VERSION, remainingEmails: 0 };
-       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); } catch(e) { diag.email = false; }
+       var diag = { email: false, sheets: false, version: SCRIPT_VERSION, remainingEmails: 0 };
+       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); diag.email = true; } catch(e) {}
+       try { ss.getSheets()[0].getName(); diag.sheets = true; } catch(e) {}
        return jsonResponse({ "result": "success", "data": diag });
+    }
+
+    if (action === 'filterHistory') {
+       var searchId = e.parameter.medicalRecord ? String(e.parameter.medicalRecord).trim() : "";
+       var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
+       var resultRows = [];
+       
+       var sheetTriage = ss.getSheets()[0];
+       var valsT = sheetTriage.getDataRange().getDisplayValues();
+       for (var i = 1; i < valsT.length; i++) {
+          var row = valsT[i];
+          if (matchFilter(row[4], row[1], row[0], searchId, searchDate)) {
+             resultRows.push({
+                source: 'triage',
+                systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], 
+                name: row[3], medicalRecord: row[4], age: row[6], complaint: row[7], 
+                esiLevel: row[15], triageTitle: row[16], discriminators: row[19],
+                dob: row[20], 
+                status: row[22] || '',
+                vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14], hgt: row[23] || '' }
+             });
+          }
+       }
+
+       var sheetInt = ss.getSheetByName("Pacientes internados");
+       if (sheetInt) {
+          var valsI = sheetInt.getDataRange().getDisplayValues();
+          for (var j = 1; j < valsI.length; j++) {
+             var rowI = valsI[j];
+             if (matchFilter(rowI[4], rowI[1], rowI[0], searchId, searchDate)) {
+                resultRows.push({
+                   source: 'internation',
+                   systemTimestamp: rowI[0], evaluationDate: rowI[1], evaluationTime: rowI[2], 
+                   name: rowI[3], medicalRecord: rowI[4], dob: rowI[5], 
+                   sector: rowI[6], bed: rowI[7], isReevaluation: rowI[8],
+                   newsScore: rowI[19], riskText: rowI[20], observations: rowI[18],
+                   status: rowI[22] || '',
+                   vitals: { pas: rowI[9], pad: rowI[10], fc: rowI[11], fr: rowI[12], temp: rowI[13], spo2: rowI[14], consc: rowI[15], o2: rowI[16], pain: rowI[17], hgt: rowI[23] || '' }
+                });
+             }
+          }
+       }
+       return jsonResponse({ "result": "success", "data": resultRows.reverse() });
     }
 
     if (action === 'getAll') {
@@ -143,9 +198,11 @@ function doGet(e) {
        if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
        var rows = values.slice(1).map(function(row) {
          return {
-           systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
-           esiLevel: row[15], triageTitle: row[16], discriminators: row[19], dob: row[20], status: row[22] || '',
-           vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14] }
+           systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
+           esiLevel: row[15], triageTitle: row[16], discriminators: row[19], 
+           dob: row[20], 
+           status: row[22] || '',
+           vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14], hgt: row[23] || '' }
          };
        });
        return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) });
@@ -159,13 +216,30 @@ function doGet(e) {
       var rows = values.slice(1).map(function(row) {
         return {
           systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], dob: row[5], sector: row[6], bed: row[7], isReevaluation: row[8],
-          vitals: { pas: row[9], pad: row[10], fc: row[11], fr: row[12], temp: row[13], spo2: row[14], consciousness: row[15], o2Sup: row[16], painLevel: row[17] },
+          vitals: { pas: row[9], pad: row[10], fc: row[11], fr: row[12], temp: row[13], spo2: row[14], consciousness: row[15], o2Sup: row[16], painLevel: row[17], hgt: row[23] || '' },
           observations: row[18], newsScore: row[19], riskText: row[20], status: row[22] || ''
         };
       });
       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) }); 
     }
 
+    if (action === 'search') {
+      var recordToFind = e.parameter.medicalRecord;
+      var sheet = ss.getSheets()[0];
+      var values = sheet.getDataRange().getDisplayValues();
+      for (var i = values.length - 1; i >= 1; i--) {
+        if (String(values[i][4]).trim() === String(recordToFind).trim()) {
+          // Busca HGT da coluna 23 se existir
+          var hgtVal = values[i][23] || '';
+          return jsonResponse({ "result": "found", "history": { 
+              "name": values[i][3], "lastDate": values[i][1], "lastTime": values[i][2], "ageString": values[i][6], "dob": values[i][20], "lastEsi": values[i][15], 
+              "lastVitals": { pa: values[i][8], fc: values[i][9], fr: values[i][10], temp: values[i][11], spo2: values[i][12], gcs: values[i][13], pain: values[i][14], hgt: hgtVal } 
+          } });
+        }
+      }
+      return jsonResponse({ "result": "not_found" });
+    }
+    
     if (action === 'searchInternation') {
       var recordToFind = e.parameter.medicalRecord;
       var sheetInt = ss.getSheetByName("Pacientes internados");
@@ -173,30 +247,40 @@ function doGet(e) {
          var vals = sheetInt.getDataRange().getDisplayValues();
          for (var i = vals.length - 1; i >= 1; i--) {
             if (String(vals[i][4]).trim() === String(recordToFind).trim()) {
+               var hgtVal = vals[i][23] || '';
                return jsonResponse({ "result": "found", "source": "internation", "history": { 
                    "name": vals[i][3], "dob": vals[i][5], "sector": vals[i][6], "bed": vals[i][7], "lastDate": vals[i][1], "lastTime": vals[i][2], "newsScore": vals[i][19], 
-                   "lastVitals": { pas: vals[i][9], pad: vals[i][10], fc: vals[i][11], fr: vals[i][12], temp: vals[i][13], spo2: vals[i][14], consc: vals[i][15], o2: vals[i][16], pain: vals[i][17] }
+                   "lastVitals": { pas: vals[i][9], pad: vals[i][10], fc: vals[i][11], fr: vals[i][12], temp: vals[i][13], spo2: vals[i][14], consc: vals[i][15], o2: vals[i][16], pain: vals[i][17], hgt: hgtVal }
                } });
             }
          }
       }
-      // Se não achou na internação, tenta buscar dados básicos na triagem
-      var sheetTriage = ss.getSheets()[0];
-      var valsT = sheetTriage.getDataRange().getDisplayValues();
-      for (var j = valsT.length - 1; j >= 1; j--) {
-        if (String(valsT[j][4]).trim() === String(recordToFind).trim()) {
-           return jsonResponse({ "result": "found", "source": "triage", "history": { "name": valsT[j][3], "dob": valsT[j][20] } });
-        }
-      }
-      return jsonResponse({ "result": "not_found" });
+      // Fallback para buscar na triagem se não achar na internação
+      return doGet({ parameter: { action: 'search', medicalRecord: recordToFind } });
     }
 
-    return jsonResponse({ "result": "error", "message": "Ação não mapeada" });
+    return jsonResponse({ "result": "error", "message": "Action not mapped: " + action });
   } catch (err) {
     return jsonResponse({ "result": "error", "message": err.toString() });
   } finally {
     lock.releaseLock();
   }
+}
+
+function matchFilter(rowId, rowDate, rowSystemDate, searchId, searchDate) {
+    var matchId = !searchId || String(rowId).trim() === searchId;
+    var matchDate = true;
+    if (searchDate) {
+        var dParts = String(rowDate).includes('/') ? rowDate.split('/') : rowDate.split('-');
+        var isoDate = (dParts.length === 3) ? (dParts[0].length === 4 ? dParts.join('-') : dParts[2] + '-' + dParts[1] + '-' + dParts[0]) : "";
+        
+        if ((!isoDate || isoDate.length < 10) && rowSystemDate) {
+            var sParts = String(rowSystemDate).split(' ')[0].split(rowSystemDate.includes('/') ? '/' : '-');
+            isoDate = (sParts.length === 3) ? (sParts[0].length === 4 ? sParts.join('-') : sParts[2] + '-' + sParts[1] + '-' + sParts[0]) : "";
+        }
+        matchDate = (isoDate === searchDate);
+    }
+    return matchId && matchDate;
 }
 
 function doPost(e) {
@@ -207,32 +291,99 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     var nowFormatted = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
 
+    if (data.action === 'invalidateBatch') {
+        var items = data.items; 
+        if (!items || items.length === 0) return jsonResponse({ "result": "success", "count": 0 });
+
+        var sheetTriage = ss.getSheets()[0];
+        var sheetInt = ss.getSheetByName("Pacientes internados");
+        var triageData = sheetTriage.getDataRange().getDisplayValues();
+        var intData = sheetInt ? sheetInt.getDataRange().getDisplayValues() : [];
+        var count = 0;
+
+        for (var k = 0; k < items.length; k++) {
+           var item = items[k];
+           var targetSheet = (item.source === 'internation') ? sheetInt : sheetTriage;
+           var targetData = (item.source === 'internation') ? intData : triageData;
+           if (!targetSheet) continue;
+
+           for (var i = 1; i < targetData.length; i++) {
+               var rowTs = String(targetData[i][0]).trim(); 
+               var rowMr = String(targetData[i][4]).trim(); 
+               
+               if (rowTs === String(item.systemTimestamp).trim() && rowMr === String(item.medicalRecord).trim()) {
+                   targetSheet.getRange(i + 1, 23).setValue("INVALIDADO");
+                   count++;
+                   break; 
+               }
+           }
+        }
+        SpreadsheetApp.flush();
+        return jsonResponse({ "result": "success", "count": count });
+    }
+
     if (data.action === 'saveInternation') {
        var sheetInt = ss.getSheetByName("Pacientes internados");
+       // Adicionado HGT no final
        sheetInt.appendRow([
           nowFormatted, getSafe(data, 'patient.evaluationDate', ''), getSafe(data, 'patient.evaluationTime', ''), getSafe(data, 'patient.name', ''), getSafe(data, 'patient.medicalRecord', ''),
           getSafe(data, 'patient.dob', ''), getSafe(data, 'patient.sector', ''), getSafe(data, 'patient.bed', ''), data.patient && data.patient.isReevaluation ? "SIM" : "NÃO",
           getSafe(data, 'vitals.pas', ''), getSafe(data, 'vitals.pad', ''), getSafe(data, 'vitals.fc', ''), getSafe(data, 'vitals.fr', ''), getSafe(data, 'vitals.temp', ''), getSafe(data, 'vitals.spo2', ''),
           getSafe(data, 'vitals.consciousness', ''), data.vitals && data.vitals.o2Sup ? "Sim" : "Não", getSafe(data, 'vitals.painLevel', ''), getSafe(data, 'observations', ''),
-          getSafe(data, 'news.score', ''), getSafe(data, 'news.riskText', ''), getSafe(data, 'user', 'Sistema'), "ATIVO"
+          getSafe(data, 'news.score', ''), getSafe(data, 'news.riskText', ''), getSafe(data, 'user', 'Sistema'), "ATIVO", getSafe(data, 'vitals.hgt', '')
        ]);
+       SpreadsheetApp.flush();
        return jsonResponse({ "result": "success" });
     }
 
-    if (data.action === 'save') {
+    if (!data.action || data.action === 'save') {
       var sheet = ss.getSheets()[0]; 
+      // Adicionado HGT no final
       sheet.appendRow([
         nowFormatted, getSafe(data, 'patient.evaluationDate', ''), getSafe(data, 'patient.evaluationTime', ''), getSafe(data, 'patient.name', ''), getSafe(data, 'patient.medicalRecord', ''), 
         data.patient && data.patient.isReevaluation ? "SIM" : "NÃO", getSafe(data, 'patient.age', '0') + " " + getSafe(data, 'patient.ageUnit', ''), getSafe(data, 'patient.complaint', ''), 
         getSafe(data, 'vitals.pas', '') + "x" + getSafe(data, 'vitals.pad', ''), getSafe(data, 'vitals.fc', ''), getSafe(data, 'vitals.fr', ''), getSafe(data, 'vitals.temp', ''), 
         getSafe(data, 'vitals.spo2', ''), getSafe(data, 'vitals.gcs', ''), getSafe(data, 'vitals.painLevel', ''), "'" + getSafe(data, 'triage.level', ''), 
         getSafe(data, 'triage.title', ''), getSafe(data, 'triage.maxWaitTime', ''), getSafe(data, 'triage.justification', ''), getSafe(data, 'triage.discriminators', ''),
-        getSafe(data, 'patient.dob', ''), getSafe(data, 'user', 'Sistema'), "ATIVO"
+        getSafe(data, 'patient.dob', ''), getSafe(data, 'user', 'Sistema'), "ATIVO", getSafe(data, 'vitals.hgt', '')
       ]);
+      SpreadsheetApp.flush();
       return jsonResponse({ "result": "success" });
     }
     
-    return jsonResponse({ "result": "error", "message": "Ação não mapeada" });
+    if (data.action === 'login') {
+       var sheetUsers = ss.getSheetByName("Usuários");
+       var users = sheetUsers.getDataRange().getDisplayValues();
+       var loginEmail = String(data.email || "").toLowerCase().trim();
+       for (var i = 1; i < users.length; i++) {
+          if (String(users[i][2]).toLowerCase().trim() === loginEmail) {
+             if (String(users[i][4]).trim() === String(data.password).trim()) return jsonResponse({ "result": "success", "user": { "name": users[i][1], "email": users[i][2], "sector": users[i][3] } });
+             return jsonResponse({ "result": "error", "message": "Senha incorreta." });
+          }
+       }
+       return jsonResponse({ "result": "error", "message": "E-mail não encontrado." });
+    }
+
+    if (data.action === 'registerUser') {
+        var sheetUsers = ss.getSheetByName("Usuários");
+        sheetUsers.appendRow([new Date(), data.name, data.email.toLowerCase(), data.sector, data.password]);
+        try { sendEmailRobust(data.email, "Acesso Liberado - " + APP_NAME, "Cadastro realizado.", ss); } catch(e) {}
+        return jsonResponse({ "result": "success" });
+    }
+
+    if (data.action === 'recoverPassword') {
+        var sheetUsers = ss.getSheetByName("Usuários");
+        var users = sheetUsers.getDataRange().getDisplayValues();
+        for (var i = 1; i < users.length; i++) {
+            if (String(users[i][2]).toLowerCase().trim() === String(data.email).toLowerCase().trim()) {
+                sendEmailRobust(data.email, "Recuperação de Senha", "Sua senha é: " + users[i][4], ss);
+                return jsonResponse({ "result": "success" });
+            }
+        }
+        return jsonResponse({ "result": "error", "message": "E-mail não encontrado." });
+    }
+    
+    return jsonResponse({ "result": "error", "message": "Ação POST não mapeada: " + data.action });
   } catch(e) {
     return jsonResponse({ "result": "error", "message": e.toString() });
   } finally {
@@ -257,7 +408,7 @@ function jsonResponse(obj) {
     try {
         const mockVitals: VitalSigns = { pas: '85', pad: '50', fc: '145', fr: '35', temp: '36.5', spo2: '88', gcs: 15, painLevel: '' };
         const mockPatient: PatientData = { name: 'DIAG', medicalRecord: '1', dob: '1990-01-01', age: 34, ageUnit: 'years', gender: 'M', complaint: 'Teste', serviceTimestamp: '', evaluationDate: '', evaluationTime: '', isReevaluation: false };
-        const mockDisc: CtasDiscriminators = { abcUnstable: false, highRiskSituation: false, resources: 'none', neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false }, sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false }, cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false }, respiratory: { dyspneaRisk: false, respiratoryDistress: false }, pediatric: { dehydration: false, feverRisk: false, lethargy: false } };
+        const mockDisc: CtasDiscriminators = { abcUnstable: false, highRiskSituation: false, resources: 'none', neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false, motorNeuroDeficit: false }, sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false }, cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false }, respiratory: { dyspneaRisk: false, respiratoryDistress: false }, pediatric: { dehydration: false, feverRisk: false, lethargy: false } };
         const resESI = calculateTriage(mockPatient, mockVitals, mockDisc);
         if (resESI.level === 2) updateOne('esi_engine', 'success', 'Cálculos de downgrade/upgrade vitais ESI OK.');
         else throw new Error("ESI falhou no teste de criticidade.");
@@ -327,7 +478,7 @@ function jsonResponse(obj) {
                  <ShieldCheck className="text-teal-400" size={28}/>
                  <div>
                     <h2 className="text-xl font-bold leading-none">Central de Diagnóstico</h2>
-                    <span className="text-[10px] text-teal-500 font-black uppercase tracking-[0.2em]">Versão 62.1 Estabilizada</span>
+                    <span className="text-[10px] text-teal-500 font-black uppercase tracking-[0.2em]">Versão 62.2 Estabilizada</span>
                  </div>
                </div>
                <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-full transition-colors">
@@ -406,7 +557,7 @@ function jsonResponse(obj) {
                         <div className="bg-rose-100 border-l-4 border-rose-600 p-4 rounded text-xs text-rose-900 leading-relaxed flex items-start gap-3">
                           <AlertTriangle className="shrink-0 mt-0.5 text-rose-600" size={24}/>
                           <div>
-                            <strong className="block text-sm mb-1 uppercase">BACKEND v62.1 ATUALIZADO</strong>
+                            <strong className="block text-sm mb-1 uppercase">BACKEND v62.2 ATUALIZADO</strong>
                             Copie o conteúdo abaixo e cole no arquivo <code>Código.gs</code> do seu projeto Google Apps Script.
                           </div>
                         </div>

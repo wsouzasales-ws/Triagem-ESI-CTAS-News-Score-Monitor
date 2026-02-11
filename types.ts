@@ -10,6 +10,7 @@ export interface VitalSigns {
   painLevel: number | '';
   o2Sup?: boolean;
   consciousness?: 'Alert' | 'Confused' | 'Pain' | 'Unresponsive';
+  hgt?: string; // Novo campo Dextro (Hemoglucoteste)
 }
 
 export interface PatientData {
@@ -51,17 +52,17 @@ export interface CtasDiscriminators {
     acuteConfusion: boolean;
     headTrauma: boolean;
     severeHeadache: boolean;
+    motorNeuroDeficit: boolean;
   };
   sepsis: {
-    // Fixed typo: renamed from scuspectedInfection to suspectedInfection
     suspectedInfection: boolean;
     immunosuppressed: boolean;
     perfursionIssues: boolean;
   };
   cardio: {
     chestPainRisk: boolean;
-    chestPainTypical: boolean; // Novo: Dor Típica
-    chestPainAtypicalCombined: boolean; // Novo: Dor Atípica + Sintomas
+    chestPainTypical: boolean;
+    chestPainAtypicalCombined: boolean;
     severePainWithVitals: boolean;
   };
   respiratory: {
@@ -110,7 +111,6 @@ export interface SheetRowData {
   triageTitle: string;
   discriminators?: string;
   status?: string;
-  // Adicionando dob para evitar erros de tipo no Dashboard
   dob?: string;
   vitals?: {
     pa: string;
@@ -119,6 +119,7 @@ export interface SheetRowData {
     temp: string;
     spo2: string;
     pain: string;
+    hgt?: string; // Novo
   };
 }
 
@@ -135,12 +136,12 @@ export interface InternationSheetRowData {
   riskText: string;
   observations: string;
   status?: string;
-  // Adicionando dob para evitar erros de tipo no Dashboard
   dob?: string;
   vitals?: {
       pas: string; pad: string; fc: string; fr: string; 
       temp: string; spo2: string; consciousness: string; 
       o2Sup: string; painLevel: string;
+      hgt?: string; // Novo
   }
 }
 
@@ -160,5 +161,6 @@ export interface PatientHistory {
     spo2: string;
     gcs: string;
     pain: string;
+    hgt?: string; // Novo
   };
 }

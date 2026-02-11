@@ -60,7 +60,7 @@ const App: React.FC = () => {
     abcUnstable: false,
     highRiskSituation: false,
     resources: 'none',
-    neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false },
+    neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false, motorNeuroDeficit: false },
     sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false },
     cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false },
     respiratory: { dyspneaRisk: false, respiratoryDistress: false },
@@ -267,7 +267,7 @@ const App: React.FC = () => {
       const currentTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       setPatient({ name: '', medicalRecord: '', dob: '', serviceTimestamp: currentTime, evaluationDate: currentDate, evaluationTime: currentTime, isReevaluation: false, age: 0, ageUnit: 'years', gender: 'M', complaint: '', reevaluationDate: currentDate, reevaluationTime: currentTime });
       setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '' });
-      setDiscriminators({ abcUnstable: false, highRiskSituation: false, resources: 'none', neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false }, sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false }, cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false }, respiratory: { dyspneaRisk: false, respiratoryDistress: false }, pediatric: { dehydration: false, feverRisk: false, lethargy: false } });
+      setDiscriminators({ abcUnstable: false, highRiskSituation: false, resources: 'none', neuro: { gcsLow: false, acuteConfusion: false, headTrauma: false, severeHeadache: false, motorNeuroDeficit: false }, sepsis: { suspectedInfection: false, immunosuppressed: false, perfursionIssues: false }, cardio: { chestPainRisk: false, chestPainTypical: false, chestPainAtypicalCombined: false, severePainWithVitals: false }, respiratory: { dyspneaRisk: false, respiratoryDistress: false }, pediatric: { dehydration: false, feverRisk: false, lethargy: false } });
       setPatientHistory(null);
     } catch (e: any) {
       setNotification({ msg: 'Erro ao salvar.', type: 'error' });

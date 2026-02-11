@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { 
   User, RefreshCw, Search, CalendarDays, Clock, Flame, 
   Activity, Stethoscope, Baby, Printer, Save, AlertTriangle, 
-  Smile, Meh, Frown 
+  Smile, Meh, Frown, Syringe, ChevronUp, ChevronDown 
 } from 'lucide-react';
 import { PatientData, VitalSigns, CtasDiscriminators, TriageResult, PatientHistory } from '../types';
 
@@ -108,6 +108,18 @@ const TriageSection: React.FC<Props> = React.memo(({
                 <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold text-slate-800 block mb-1">PA Sistólica</label><input type="number" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.pas} onChange={e => setVitals(prev => ({...prev, pas: e.target.value}))} /></div><div><label className="text-xs font-bold text-slate-800 block mb-1">PA Diastólica</label><input type="number" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.pad} onChange={e => setVitals(prev => ({...prev, pad: e.target.value}))} /></div></div>
                 <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold text-slate-800 block mb-1">F. Cardíaca</label><input type="number" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.fc} onChange={e => setVitals(prev => ({...prev, fc: e.target.value}))} /></div><div><label className="text-xs font-bold text-slate-800 block mb-1">F. Respiratória</label><input type="number" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.fr} onChange={e => setVitals(prev => ({...prev, fr: e.target.value}))} /></div></div>
                 <div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-bold text-slate-800 block mb-1">SpO2</label><input type="number" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.spo2} onChange={e => setVitals(prev => ({...prev, spo2: e.target.value}))} /></div><div><label className="text-xs font-bold text-slate-800 block mb-1">Temperatura</label><input type="text" className="w-full p-2 border border-slate-600 bg-slate-800 rounded font-mono text-lg text-white font-bold" value={vitals.temp} onChange={e => setVitals(prev => ({...prev, temp: e.target.value}))} /></div></div>
+                
+                {/* DEXTRO HGT INPUT */}
+                <div className="border-t border-slate-200 pt-3">
+                    <label className="text-xs font-bold text-blue-800 block mb-1 flex items-center gap-1"><Syringe size={12}/> DEXTRO (HGT)</label>
+                    <div className="relative flex items-center bg-blue-50 border border-blue-200 rounded overflow-hidden">
+                        <input type="text" placeholder="---" value={vitals.hgt || ''} onChange={e => setVitals(prev => ({...prev, hgt: e.target.value}))} className="w-full p-2 bg-transparent text-blue-900 font-mono text-lg font-bold outline-none text-center" />
+                        <div className="flex flex-col border-l border-blue-200 bg-white">
+                            <span className="px-2 py-2 text-[10px] font-bold text-blue-600">mg/dL</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="border-t border-slate-200 pt-3"><label className="text-xs font-bold text-slate-800 block mb-1">Glasgow</label><div className="flex items-center gap-3"><div className="flex-1"><input type="range" min="3" max="15" className="w-full h-2 bg-slate-200 rounded-lg accent-teal-600" value={vitals.gcs} onChange={e => setVitals(prev => ({...prev, gcs: parseInt(e.target.value)}))} /></div><span className="font-mono font-bold text-xl w-10 text-center bg-slate-800 text-white rounded py-1">{vitals.gcs}</span></div></div>
                 <div className="border-t border-slate-200 pt-3"><label className="text-xs font-bold text-slate-800 block mb-3 uppercase">Dor</label><div className="flex items-center justify-between mb-3 h-10">{painConfig ? (<div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md ${painConfig.color}`}>{currentPainLevel}</div><span className="font-bold text-slate-700 text-base uppercase">{painConfig.label}</span></div>) : (<span className="text-sm text-slate-400 font-medium italic">Selecione o nível de dor</span>)}<PainIcon size={32} strokeWidth={2.5} className={painConfig ? painConfig.text : 'text-slate-300'} /></div><div className="flex gap-1 h-10 w-full">{Array.from({ length: 11 }, (_, i) => i).map((level) => { const cfg = getPainConfig(level); const isSelected = vitals.painLevel === level; return (<button key={level} onClick={() => setVitals(prev => ({...prev, painLevel: level}))} className={`flex-1 rounded-md text-white font-bold text-sm transition-all shadow-sm ${cfg.color} ${isSelected ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10' : 'opacity-40 hover:opacity-100 hover:scale-105'}`}>{level}</button>); })}</div></div>
             </div>
@@ -127,6 +139,7 @@ const TriageSection: React.FC<Props> = React.memo(({
                 <div className="space-y-1"><h3 className="text-xs font-bold text-slate-600 uppercase">Neurológico</h3>
                   <label className="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={discriminators.neuro.acuteConfusion} onChange={e => updateDisc('neuro', 'acuteConfusion', e.target.checked)}/> <span className="text-slate-800">Alt. Aguda Consciência / Delírium</span></label>
                   <label className="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={discriminators.neuro.severeHeadache} onChange={e => updateDisc('neuro', 'severeHeadache', e.target.checked)}/> <span className="text-slate-800">Cefaleia Súbita Intensa</span></label>
+                  <label className="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={discriminators.neuro.motorNeuroDeficit} onChange={e => updateDisc('neuro', 'motorNeuroDeficit', e.target.checked)}/> <span className="text-slate-800">Alterações motoras e/ou Neurológicas (boca torta, Perda de Força / Formigamento, Alteração de fala etc.)</span></label>
                 </div>
                 <div className="space-y-1"><h3 className="text-xs font-bold text-slate-600 uppercase">Infeccioso / Sepse</h3>
                   <label className="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={discriminators.sepsis.suspectedInfection} onChange={e => updateDisc('sepsis', 'suspectedInfection', e.target.checked)}/> <span className="text-slate-800">Infecção Suspeita / Confirmada</span></label>

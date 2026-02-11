@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Check, Search, RefreshCcw, Heart, Brain, Thermometer, AlertCircle, Calendar } from 'lucide-react';
+import { User, Activity, Save, Printer, BedDouble, Stethoscope, FileText, ChevronDown, ChevronUp, Check, Search, RefreshCcw, Heart, Brain, Thermometer, AlertCircle, Calendar, Syringe } from 'lucide-react';
 import { PatientData, VitalSigns } from '../types';
 import { calculateNEWS, NewsResultExtended } from '../utils/newsCalculator';
 import { evaluateProtocols } from '../utils/protocolEngine';
@@ -36,7 +36,7 @@ const SYMPTOM_LABELS: Record<string, string> = {
 
 interface InternationHistory {
     lastDate?: string; lastTime?: string; name: string; dob: string; sector?: string; bed?: string;
-    lastVitals?: { pas: string; pad: string; fc: string; fr: string; temp: string; spo2: string; consc: string; o2: string; pain: string; };
+    lastVitals?: { pas: string; pad: string; fc: string; fr: string; temp: string; spo2: string; consc: string; o2: string; pain: string; hgt?: string; };
     newsScore?: string; riskText?: string;
 }
 
@@ -46,7 +46,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
   });
 
   const [vitals, setVitals] = useState<VitalSigns>({
-    pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert'
+    pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', hgt: ''
   });
 
   const [observations, setObservations] = useState('');
@@ -140,7 +140,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
     try {
         await fetchWithRetry(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveInternation', patient: {...patient, isReevaluation: !!patient.isReevaluation}, vitals: {...vitals, painLevel: String(vitals.painLevel), gcs: String(vitals.gcs)}, news: newsResult, observations: finalObs, user: currentUser?.name || 'Desconhecido' }) });
         setNotification({ msg: 'Salvo com sucesso!', type: 'success' });
-        setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert' });
+        setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', hgt: '' });
         setObservations(''); setSelectedSymptoms([]); setInternationHistory(null);
         setPatient(prev => ({...prev, name: '', medicalRecord: '', dob: '', isReevaluation: false, sector: '', bed: ''}));
     } catch (e: any) { setNotification({ msg: `Erro: ${e.message}`, type: 'error' }); }
@@ -325,13 +325,24 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
           </div>
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
             <span className="text-xs font-bold text-slate-700 uppercase">NÍVEL CONSCIÊNCIA</span>
-            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-sm font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white shadow-sm">
+            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-sm font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white">
               <option value="Alert">Alerta (A)</option>
               <option value="Confused">Confuso (C)</option>
               <option value="Pain">Dor (P)</option>
               <option value="Unresponsive">Inconsciente (U)</option>
             </select>
           </div>
+        </div>
+
+        {/* DEXTRO INPUT */}
+        <div className="mt-8">
+            <label className="text-[10px] font-bold text-blue-800 block mb-1 flex items-center gap-1"><Syringe size={12}/> DEXTRO (HGT)</label>
+            <div className="relative flex items-center bg-blue-50 border border-blue-200 rounded overflow-hidden shadow-inner max-w-xs">
+                <input type="text" placeholder="---" value={vitals.hgt || ''} onChange={e => setVitals(prev => ({...prev, hgt: e.target.value}))} className="w-full p-2 bg-transparent text-blue-900 font-mono text-lg font-bold outline-none text-center" />
+                <div className="flex flex-col border-l border-blue-200 bg-white">
+                    <span className="px-2 py-2 text-[10px] font-bold text-blue-600">mg/dL</span>
+                </div>
+            </div>
         </div>
 
         <div className="mt-8 border-t border-slate-100 pt-6">
@@ -341,7 +352,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
                     <button 
                         key={i} 
                         onClick={() => setVitals(p => ({...p, painLevel: i}))}
-                        className={`flex-1 rounded transition-all flex items-center justify-center font-bold text-sm shadow-sm ${vitals.painLevel === i ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10 text-slate-900' : 'text-slate-600'}`}
+                        className={`flex-1 rounded transition-all flex items-center justify-center font-bold text-sm ${vitals.painLevel === i ? 'ring-4 ring-offset-2 ring-slate-300 scale-110 z-10 text-slate-900' : 'text-slate-600'}`}
                         style={{ backgroundColor: painColors[i] }}
                     >
                         {i}
@@ -380,7 +391,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
         </div>
       </div>
 
-      {/* CHECKLIST DE SINTOMAS */}
+      {/* CHECKLIST DE SINTOMAS - VISUAL RESTAURADO CONFORME PRINT */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
           <button 
             onClick={() => setIsSymptomsOpen(!isSymptomsOpen)} 
