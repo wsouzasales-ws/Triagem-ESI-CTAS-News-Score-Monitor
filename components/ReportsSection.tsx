@@ -142,7 +142,21 @@ const ReportsSection: React.FC<Props> = React.memo(({
         const disc = (row.discriminators || '').toLowerCase();
         const just = (row.triageTitle || '').toLowerCase(); 
 
-        if (disc.includes('assimetria') || disc.includes('fala') || disc.includes('fraqueza') || disc.includes('visual') || just.includes('avc')) protocolCounts.avc++;
+        if (
+          disc.includes('assimetria') || 
+          disc.includes('fala') || 
+          disc.includes('fraqueza') || 
+          disc.includes('visual') || 
+          disc.includes('consciência') || 
+          disc.includes('delírium') || 
+          disc.includes('cefaleia') || 
+          disc.includes('motor') || 
+          disc.includes('neurológico') || 
+          disc.includes('boca torta') || 
+          disc.includes('formigamento') || 
+          disc.includes('avc') || 
+          just.includes('avc')
+        ) protocolCounts.avc++;
         if (disc.includes('sepse') || disc.includes('infecção') || disc.includes('sirs') || just.includes('sepse')) protocolCounts.sepse++;
         if (disc.includes('torácica') || disc.includes('toracica') || just.includes('toracica')) protocolCounts.dorToracica++;
         if (disc.includes('dor severa') || disc.includes('dor intensa') || disc.includes('dor >') || disc.includes('dor 7') || just.includes('dor')) protocolCounts.dorIntensa++;
