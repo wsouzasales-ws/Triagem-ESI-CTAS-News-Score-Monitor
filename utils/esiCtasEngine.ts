@@ -61,6 +61,12 @@ export const calculateTriage = (
   if (vitals.gcs < 15) { ctasPositive = true; positiveDiscriminators.push(`Glasgow < 15 (${vitals.gcs})`); }
   if (discriminators.neuro.acuteConfusion) { ctasPositive = true; positiveDiscriminators.push("Alteração Aguda da Consciência / Delírium"); }
   if (discriminators.neuro.severeHeadache) { ctasPositive = true; positiveDiscriminators.push("Cefaleia 'Thunderclap' / Súbita Intensa"); }
+  
+  // Novo discriminador neuro
+  if (discriminators.neuro.motorNeuroDeficit) { 
+    ctasPositive = true; 
+    positiveDiscriminators.push("Déficit Motor/Neurológico Agudo (Protocolo AVC)"); 
+  }
 
   let sirsCount = 0;
   if (temp > 38 || temp < 36) sirsCount++;

@@ -1,5 +1,5 @@
 {
-  "name": "HSMC - Triagem ESI + CTAS",
+  "name": "HSMC - Triagem ESI + CTAS + News Score Monitor",
   "description": "Dashboard de acolhimento para avaliação de sinais vitais, cálculo automático de NEWS e triagem de protocolos (AVC, Sepse, Dor Torácica).",
   "requestFramePermissions": []
 }
