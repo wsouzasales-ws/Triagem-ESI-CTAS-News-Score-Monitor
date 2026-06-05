@@ -363,33 +363,78 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
       </div>
 
       {/* CARD NEWS RESULTADO */}
-      <div className="bg-white rounded-xl shadow-lg border-l-[8px] border-[#0d9488] p-6 overflow-hidden">
-        <div className="flex flex-col md:flex-row items-center gap-8">
-            <div className="relative flex items-center justify-center">
-                <div className="w-16 h-16 rounded-full border-4 border-emerald-100 flex items-center justify-center">
-                    <span className="text-3xl font-black text-[#0d9488]">{newsResult.score}</span>
+      <div className="space-y-2 mt-6">
+        <h3 className="text-xs font-bold text-slate-500 uppercase">Resultado NEWS</h3>
+        {newsResult.riskClass === 'high' ? (
+          <div className="bg-rose-50 border-2 border-rose-600 rounded-lg p-6 shadow-md text-center flex flex-col items-center justify-center relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-3 opacity-20 pointer-events-none">
+                <AlertCircle size={80} className="text-rose-600" />
+             </div>
+             <p className="text-2xl font-black text-rose-800 uppercase mb-2 relative z-10 flex items-center justify-center gap-2">
+                 {newsResult.riskText} (Score: {newsResult.score})
+             </p>
+             <p className="text-rose-700 font-bold uppercase relative z-10">
+                 {newsResult.conduct}
+             </p>
+          </div>
+        ) : (
+          <div className={`rounded-xl shadow-md border-l-[8px] p-6 overflow-hidden ${newsResult.riskClass === 'medium' ? 'bg-amber-50 border-amber-500' : 'bg-white border-[#0d9488]'}`}>
+            <div className="flex flex-col md:flex-row items-center gap-8">
+                <div className="relative flex items-center justify-center">
+                    <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center ${newsResult.riskClass === 'medium' ? 'border-amber-200' : 'border-emerald-100'}`}>
+                        <span className={`text-3xl font-black ${newsResult.riskClass === 'medium' ? 'text-amber-600' : 'text-[#0d9488]'}`}>{newsResult.score}</span>
+                    </div>
                 </div>
-            </div>
-            
-            <div className="flex-1 text-center md:text-left">
-                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">PONTUAÇÃO NEWS</h3>
-                <div className={`text-2xl font-black uppercase tracking-tight ${newsResult.riskClass === 'high' ? 'text-red-600' : 'text-[#0d9488]'}`}>
-                    {newsResult.riskText}
+                
+                <div className="flex-1 text-center md:text-left">
+                    <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${newsResult.riskClass === 'medium' ? 'text-amber-700/60' : 'text-slate-400'}`}>PONTUAÇÃO NEWS</h3>
+                    <div className={`text-2xl font-black uppercase tracking-tight ${newsResult.riskClass === 'medium' ? 'text-amber-600' : 'text-[#0d9488]'}`}>
+                        {newsResult.riskText}
+                    </div>
                 </div>
-            </div>
 
-            <div className="hidden md:block w-px h-12 bg-slate-100"></div>
+                <div className="hidden md:block w-px h-12 bg-slate-200"></div>
 
-            <div className="flex-1 text-center md:text-left">
-                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-center md:justify-start gap-1">
-                    <Activity size={12}/> CONDUTA RECOMENDADA
-                </h3>
-                <div className="text-base font-bold text-slate-700">
-                    {newsResult.conduct}
+                <div className="flex-1 text-center md:text-left">
+                    <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-1 flex items-center justify-center md:justify-start gap-1 ${newsResult.riskClass === 'medium' ? 'text-amber-700/60' : 'text-slate-400'}`}>
+                        <Activity size={12}/> CONDUTA RECOMENDADA
+                    </h3>
+                    <div className={`text-base font-bold ${newsResult.riskClass === 'medium' ? 'text-amber-800' : 'text-slate-700'}`}>
+                        {newsResult.conduct}
+                    </div>
                 </div>
             </div>
-        </div>
+          </div>
+        )}
       </div>
+
+      {/* ALERTA DE PROTOCOLOS INTERNAÇÃO */}
+      {activeProtocols && activeProtocols.length > 0 && (
+        <div className="mt-6 space-y-2">
+            <h3 className="text-xs font-bold text-slate-500 uppercase">Alertas de Protocolo Ativos</h3>
+            {activeProtocols.map((alert, idx) => {
+              const bg = alert.type === 'avc' ? 'bg-amber-400' : alert.type === 'dorToracica' ? 'bg-teal-600' : alert.type === 'sepse' ? 'bg-pink-500' : 'bg-emerald-600';
+              const border = alert.type === 'avc' ? 'border-amber-500' : alert.type === 'dorToracica' ? 'border-teal-700' : alert.type === 'sepse' ? 'border-pink-600' : 'border-emerald-700';
+              const text = alert.type === 'avc' ? 'text-amber-900' : 'text-white';
+              const titleMap = { avc: "POSSÍVEL PROTOCOLO DE AVC", dorToracica: "POSSÍVEL PROTOCOLO DE DOR TORÁCICA", sepse: "POSSÍVEL PROTOCOLO DE SEPSE", dor: "POSSÍVEL PROTOCOLO DE DOR" };
+              
+              return (
+                <div key={idx} className={`${bg} ${border} border-l-8 p-3 rounded flex flex-col justify-center shadow-md relative overflow-hidden`}>
+                   <div className="flex justify-between items-start">
+                     <span className={`font-black uppercase flex items-center gap-2 ${text}`}>
+                        <AlertCircle size={20} className="mb-0.5" /> 
+                        {titleMap[alert.type as keyof typeof titleMap] || alert.type}
+                     </span>
+                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-black/10 ${text}`}>Prioridade</span>
+                   </div>
+                   <ul className={`mt-2 list-disc list-inside text-sm font-medium ${text}`}>
+                      {alert.reason?.map((r, i) => <li key={i}>{r}</li>)}
+                   </ul>
+                </div>
+              );
+            })}
+        </div>
+      )}
 
       {/* CHECKLIST DE SINTOMAS - VISUAL RESTAURADO CONFORME PRINT */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">

@@ -58,6 +58,57 @@ const TriageSection: React.FC<Props> = React.memo(({
     }
   };
 
+  const activeAlerts = React.useMemo(() => {
+    const alerts: { title: string, bg: string, border: string, text: string, reasons: string[] }[] = [];
+    
+    // AVC
+    const avcReasons: string[] = [];
+    if (discriminators.neuro.acuteConfusion) avcReasons.push("Alt. Aguda Consciência / Delírium");
+    if (discriminators.neuro.severeHeadache) avcReasons.push("Cefaleia Súbita Intensa");
+    if (discriminators.neuro.motorNeuroDeficit) avcReasons.push("Alterações motoras e/ou Neurológicas");
+    if (avcReasons.length > 0) {
+        alerts.push({ title: "POSSÍVEL PROTOCOLO DE AVC", bg: "bg-amber-400", border: "border-amber-500", text: "text-amber-900", reasons: avcReasons });
+    }
+
+    // Dor Torácica
+    const dtReasons: string[] = [];
+    if (discriminators.cardio.chestPainTypical) dtReasons.push("Dor torácica típica (aperto, peso, ardência)");
+    if (discriminators.cardio.chestPainAtypicalCombined) dtReasons.push("Dor estômago/costas + Sintomas associados");
+    if (dtReasons.length > 0) {
+        alerts.push({ title: "POSSÍVEL PROTOCOLO DE DOR TORÁCICA", bg: "bg-teal-600", border: "border-teal-700", text: "text-white", reasons: dtReasons });
+    }
+
+    // Sepse
+    const fc = parseInt(vitals.fc) || 0;
+    const fr = parseInt(vitals.fr) || 0;
+    const temp = parseFloat(vitals.temp.replace(',', '.')) || 0;
+    let sirsCount = 0;
+    const sirsReasons: string[] = [];
+    if (temp > 38 || temp < 36) { sirsCount++; sirsReasons.push(`Temp ${temp}ºC`); }
+    if (fc > 90) { sirsCount++; sirsReasons.push(`FC ${fc} bpm`); }
+    if (fr > 20) { sirsCount++; sirsReasons.push(`FR ${fr} irpm`); }
+
+    const sepseReasons: string[] = [];
+    if (discriminators.sepsis.suspectedInfection) sepseReasons.push("Infecção Suspeita / Confirmada");
+    if (sirsCount >= 2) sepseReasons.push(`SIRS: ${sirsReasons.join(', ')}`);
+    
+    if (sirsCount >= 2) {
+        alerts.push({ title: "POSSÍVEL PROTOCOLO DE SEPSE", bg: "bg-pink-500", border: "border-pink-600", text: "text-white", reasons: sepseReasons });
+    }
+
+    // Dor
+    const painAlerts: string[] = [];
+    const pain = typeof vitals.painLevel === 'number' ? vitals.painLevel : 0;
+    if (pain >= 8) painAlerts.push(`Nível de Dor: ${pain} (Intensa)`);
+    else if (pain === 7 && (sirsCount > 0 || discriminators.cardio.chestPainRisk)) painAlerts.push(`Dor Intensa (7) com agravantes`);
+    
+    if (painAlerts.length > 0) {
+        alerts.push({ title: "POSSÍVEL PROTOCOLO DE DOR", bg: "bg-emerald-600", border: "border-emerald-700", text: "text-white", reasons: painAlerts });
+    }
+    
+    return alerts;
+  }, [discriminators, vitals]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 1. DADOS DO PACIENTE */}
@@ -181,7 +232,58 @@ const TriageSection: React.FC<Props> = React.memo(({
           </div>
       </div>
 
-      <section className="bg-white p-6 rounded-lg shadow-md border border-slate-200 mt-6"><div className="flex flex-col md:flex-row items-center justify-between gap-6"><div className="flex-1 space-y-2"><h3 className="text-sm font-bold text-slate-700 uppercase">Classificação Final</h3><div className="text-sm text-slate-800"><strong>Justificativa:</strong><ul className="list-disc list-inside mt-1 text-slate-700">{triageResult.justification.map((j, i) => <li key={i}>{j}</li>)}{triageResult.justification.length === 0 && <li>Triagem padrão baseada em recursos.</li>}</ul></div><div className="flex items-center gap-2 mt-2 text-xs font-mono bg-slate-100 text-slate-900 p-2 rounded inline-block font-bold"><span>Tempo Alvo: {triageResult.maxWaitTime}</span></div></div><div className="flex gap-4"><button onClick={handlePrint} className="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-6 rounded-lg shadow flex items-center gap-2"><Printer size={20} /> PDF</button><button onClick={handleSubmit} disabled={isSubmitting} className="bg-rose-700 hover:bg-rose-800 disabled:bg-rose-400 text-white font-bold py-3 px-8 rounded-lg shadow flex items-center gap-2">{isSubmitting ? 'Salvando...' : <><Save size={20} /> FINALIZAR</>}</button></div></div></section>
+      {activeAlerts.length > 0 && (
+        <section className="bg-slate-50 border border-slate-200 p-4 rounded-lg shadow-sm mt-6">
+          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Alertas de Protocolo Ativos</h3>
+          <div className="space-y-2">
+            {activeAlerts.map((alert, idx) => (
+              <div key={idx} className={`${alert.bg} ${alert.border} border-l-8 p-3 rounded flex flex-col justify-center shadow-md relative overflow-hidden`}>
+                <div className="flex justify-between items-start">
+                  <span className={`font-black uppercase flex items-center gap-2 ${alert.text}`}>
+                    <AlertTriangle size={20} className="mb-0.5" /> 
+                    {alert.title}
+                  </span>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-black/10 ${alert.text}`}>
+                    PRIORIDADE
+                  </span>
+                </div>
+                <ul className={`mt-2 list-disc list-inside text-sm font-medium ${alert.text}`}>
+                  {alert.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className={`bg-white p-6 rounded-lg shadow-md border-2 ${triageResult.color.replace('bg-', 'border-')} mt-6 relative overflow-hidden`}>
+        <div className={`absolute top-0 left-0 w-full h-1.5 ${triageResult.color}`}></div>
+        <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6 pt-2">
+          <div className="flex-1 space-y-3">
+            <h3 className={`text-xl font-black uppercase ${triageResult.color.replace('bg-', 'text-')}`}>
+              CLASSIFICAÇÃO FINAL: {triageResult.title.split(' - ')[0]} {/* shows ESI X */}
+            </h3>
+            <div className="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
+              <strong>Justificativa:</strong>
+              <ul className="list-disc list-inside mt-1 text-slate-700">
+                {triageResult.justification.map((j, i) => <li key={i}>{j}</li>)}
+                {triageResult.justification.length === 0 && <li>Triagem padrão baseada em recursos.</li>}
+              </ul>
+            </div>
+            <div className="flex items-center gap-2 mt-2 text-sm font-mono bg-slate-100 text-slate-900 p-2 px-3 rounded inline-block font-bold">
+              <span>Tempo Alvo: {triageResult.maxWaitTime}</span>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 xl:self-center">
+            <button onClick={handlePrint} className="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-6 rounded-lg shadow flex items-center justify-center gap-2 w-full sm:w-auto">
+              <Printer size={20} /> PDF
+            </button>
+            <button onClick={handleSubmit} disabled={isSubmitting} className="bg-rose-700 hover:bg-rose-800 disabled:bg-rose-400 text-white font-bold py-3 px-8 rounded-lg shadow flex items-center justify-center gap-2 w-full sm:w-auto">
+              {isSubmitting ? 'Salvando...' : <><Save size={20} /> FINALIZAR</>}
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 });

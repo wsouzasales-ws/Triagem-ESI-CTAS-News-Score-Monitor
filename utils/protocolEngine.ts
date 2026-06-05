@@ -133,20 +133,17 @@ export const evaluateProtocols = (
   const sepseFinalReason: string[] = [];
 
   // 1. Infecção + (SIRS >= 2 OU Disfunção >= 1)
-  if (hasInfection && (sirsCount >= 2 || dysfunctionFound)) {
+  if (hasInfection && sirsCount >= 2) {
       sepseTriggered = true;
       sepseFinalReason.push("Infecção + Critérios Clínicos");
-  }
-  // 2. SIRS >= 2 + Alt. Consciência (Segurança)
-  else if (sirsCount >= 2 && alteredMental) {
+  } else if (hasInfection && dysfunctionFound) {
       sepseTriggered = true;
-      sepseFinalReason.push("SIRS + Alt. Consciência (Suspeita Séptica)");
-  }
-  // 3. SIRS >= 2 + O2 Suplementar (Segurança)
-  else if (sirsCount >= 2 && vitals.o2Sup) {
+      sepseFinalReason.push("Infecção + Critérios Clínicos");
+  } else if (sirsCount >= 2) {
       sepseTriggered = true;
-      sepseFinalReason.push("SIRS + O2 Suplementar (Suspeita Séptica)");
+      sepseFinalReason.push("SIRS >= 2 (Suspeita Séptica)");
   }
+
 
   if (sepseTriggered) {
       if (hasInfection) sepseFinalReason.push("Infecção Suspeita/Confirmada");

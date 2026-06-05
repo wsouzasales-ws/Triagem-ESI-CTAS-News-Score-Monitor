@@ -73,7 +73,14 @@ export const calculateTriage = (
   if (fc > 90) sirsCount++;
   if (fr > 20) sirsCount++;
   
-  if (sirsCount >= 2 && discriminators.sepsis.suspectedInfection) { ctasPositive = true; positiveDiscriminators.push("Sepse Provável (SIRS + Infecção)"); }
+  if (sirsCount >= 2) { 
+      ctasPositive = true; 
+      if (discriminators.sepsis.suspectedInfection) {
+          positiveDiscriminators.push("Sepse Provável (SIRS + Infecção)"); 
+      } else {
+          positiveDiscriminators.push("Sepse Provável (SIRS >= 2)");
+      }
+  }
   if (discriminators.sepsis.immunosuppressed && temp > 38) { ctasPositive = true; positiveDiscriminators.push("Neutropenia Febril / Imunossupressão"); }
   if (discriminators.sepsis.perfursionIssues) { ctasPositive = true; positiveDiscriminators.push("Sinais de Má Perfusão / Sepse Oculta"); }
 
