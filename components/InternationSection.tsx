@@ -413,9 +413,9 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
         <div className="mt-6 space-y-2">
             <h3 className="text-xs font-bold text-slate-500 uppercase">Alertas de Protocolo Ativos</h3>
             {activeProtocols.map((alert, idx) => {
-              const bg = alert.type === 'avc' ? 'bg-amber-400' : alert.type === 'dorToracica' ? 'bg-teal-600' : alert.type === 'sepse' ? 'bg-pink-500' : 'bg-emerald-600';
-              const border = alert.type === 'avc' ? 'border-amber-500' : alert.type === 'dorToracica' ? 'border-teal-700' : alert.type === 'sepse' ? 'border-pink-600' : 'border-emerald-700';
-              const text = alert.type === 'avc' ? 'text-amber-900' : 'text-white';
+              const bg = alert.type === 'avc' ? 'bg-amber-400' : alert.type === 'dorToracica' ? 'bg-blue-100' : alert.type === 'sepse' ? 'bg-pink-500' : 'bg-emerald-600';
+              const border = alert.type === 'avc' ? 'border-amber-500' : alert.type === 'dorToracica' ? 'border-blue-600' : alert.type === 'sepse' ? 'border-pink-600' : 'border-emerald-700';
+              const text = alert.type === 'avc' ? 'text-amber-900' : alert.type === 'dorToracica' ? 'text-blue-900' : 'text-white';
               const titleMap = { avc: "POSSÍVEL PROTOCOLO DE AVC", dorToracica: "POSSÍVEL PROTOCOLO DE DOR TORÁCICA", sepse: "POSSÍVEL PROTOCOLO DE SEPSE", dor: "POSSÍVEL PROTOCOLO DE DOR" };
               
               return (

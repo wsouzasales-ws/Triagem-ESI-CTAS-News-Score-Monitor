@@ -75,7 +75,7 @@ const TriageSection: React.FC<Props> = React.memo(({
     if (discriminators.cardio.chestPainTypical) dtReasons.push("Dor torácica típica (aperto, peso, ardência)");
     if (discriminators.cardio.chestPainAtypicalCombined) dtReasons.push("Dor estômago/costas + Sintomas associados");
     if (dtReasons.length > 0) {
-        alerts.push({ title: "POSSÍVEL PROTOCOLO DE DOR TORÁCICA", bg: "bg-teal-600", border: "border-teal-700", text: "text-white", reasons: dtReasons });
+        alerts.push({ title: "POSSÍVEL PROTOCOLO DE DOR TORÁCICA", bg: "bg-blue-100", border: "border-blue-600", text: "text-blue-900", reasons: dtReasons });
     }
 
     // Sepse
