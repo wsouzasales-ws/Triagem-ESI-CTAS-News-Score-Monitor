@@ -136,7 +136,7 @@ const InternationReportsSection: React.FC<Props> = ({
         <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200 gap-4">
             <div className="flex items-center gap-4">
               <div>
-                <h2 className="text-lg font-bold text-emerald-800 flex items-center gap-2"><BedDouble className="text-emerald-600"/> Indicadores de Internação (NEWS)</h2>
+                <h2 className="text-lg font-bold text-emerald-800 flex items-center gap-2"><BedDouble className="text-emerald-600"/> Indicadores de Internação (NEWS 2)</h2>
                 <p className="text-xs text-slate-500">Filtrar por mês de referência</p>
               </div>
               <input 

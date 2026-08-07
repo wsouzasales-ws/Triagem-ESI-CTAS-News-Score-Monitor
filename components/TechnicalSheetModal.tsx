@@ -28,7 +28,7 @@ export const TechnicalSheetModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 onClick={() => setActiveTab('internacao')}
                 className={`px-6 py-3 text-sm font-bold uppercase transition-colors ${activeTab === 'internacao' ? 'bg-white border-b-2 border-teal-600 text-teal-800' : 'text-slate-500 hover:text-slate-700'}`}
             >
-                Pacientes Internados (NEWS)
+                Pacientes Internados (NEWS 2)
             </button>
             <button 
                 onClick={() => setActiveTab('triagem')}
@@ -48,17 +48,17 @@ export const TechnicalSheetModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 {/* 1. NEWS TABLE */}
                 <section>
                     <h3 className="flex items-center gap-2 font-bold text-lg text-slate-900 mb-2">
-                        <Activity size={20} className="text-teal-600"/> 1. ESCORE NEWS (NATIONAL EARLY WARNING SCORE) - HPM PC020
+                        <Activity size={20} className="text-teal-600"/> 1. ESCORE NEWS 2 (NATIONAL EARLY WARNING SCORE 2) - HPM PC020
                     </h3>
                     <p className="mb-4 text-slate-600">
-                        O cálculo de deterioração clínica segue a tabela adaptada para o protocolo institucional da Rede Medical. O sistema atribui pontuações de 0 a 3 para cada sinal vital.
+                        O cálculo de deterioração clínica segue a metodologia oficial do <strong>NEWS 2 (Royal College of Physicians)</strong>. O sistema atribui pontuações de 0 a 3 para cada sinal vital, incluindo suporte a pacientes DPOC (Escala 2 de SpO2), escala ACVPU de consciência e pontuação 2 para O2 suplementar.
                     </p>
 
                     <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-sm">
                         <table className="w-full text-xs md:text-sm text-center border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-300">
-                                    <th className="p-3 text-left font-bold text-slate-800 w-40 border-r border-slate-300 bg-slate-50">Parâmetro</th>
+                                    <th className="p-3 text-left font-bold text-slate-800 w-44 border-r border-slate-300 bg-slate-50">Parâmetro</th>
                                     <th className="p-3 font-bold text-slate-900 bg-red-100 w-24 border-r border-slate-200">3</th>
                                     <th className="p-3 font-bold text-slate-900 bg-orange-100 w-24 border-r border-slate-200">2</th>
                                     <th className="p-3 font-bold text-slate-900 bg-yellow-100 w-24 border-r border-slate-200">1</th>
@@ -82,11 +82,11 @@ export const TechnicalSheetModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 <tr className="hover:bg-slate-50">
                                     <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">Freq. Cardíaca</td>
                                     <td className="p-2 border-r border-slate-100">&le; 40</td>
+                                    <td className="p-2 border-r border-slate-100">-</td>
                                     <td className="p-2 border-r border-slate-100">41-50</td>
                                     <td className="p-2 border-r border-slate-100">51-90</td>
                                     <td className="p-2 border-r border-slate-100">91-110</td>
                                     <td className="p-2 border-r border-slate-100">111-130</td>
-                                    <td className="p-2 border-r border-slate-100">-</td>
                                     <td className="p-2">&ge; 131</td>
                                 </tr>
                                 <tr className="hover:bg-slate-50">
@@ -110,7 +110,7 @@ export const TechnicalSheetModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                     <td className="p-2">-</td>
                                 </tr>
                                 <tr className="hover:bg-slate-50">
-                                    <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">SpO2</td>
+                                    <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">SpO2 Escala 1 (Padrão)</td>
                                     <td className="p-2 border-r border-slate-100">&le; 91</td>
                                     <td className="p-2 border-r border-slate-100">92-93</td>
                                     <td className="p-2 border-r border-slate-100">94-95</td>
@@ -118,26 +118,35 @@ export const TechnicalSheetModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                     <td className="p-2 border-r border-slate-100" colSpan={3}>-</td>
                                 </tr>
                                 <tr className="hover:bg-slate-50">
-                                    <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">Consciência</td>
+                                    <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">SpO2 Escala 2 (DPOC)</td>
+                                    <td className="p-2 border-r border-slate-100">&le; 83</td>
+                                    <td className="p-2 border-r border-slate-100">84-85</td>
+                                    <td className="p-2 border-r border-slate-100">86-87</td>
+                                    <td className="p-2 border-r border-slate-100">88-92</td>
+                                    <td className="p-2 border-r border-slate-100">93-94 (O2)</td>
+                                    <td className="p-2 border-r border-slate-100">95-96 (O2)</td>
+                                    <td className="p-2">&ge; 97 (O2)</td>
+                                </tr>
+                                <tr className="hover:bg-slate-50">
+                                    <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">Consciência (ACVPU)</td>
+                                    <td className="p-2 border-r border-slate-100 text-xs font-semibold" colSpan={3}>Confuso (C) / Voz (V) / Dor (P) / Inconsciente (U) [3]</td>
+                                    <td className="p-2 border-r border-slate-100">Alerta (A)</td>
                                     <td className="p-2 border-r border-slate-100" colSpan={3}>-</td>
-                                    <td className="p-2 border-r border-slate-100">Alerta</td>
-                                    <td className="p-2 border-r border-slate-100">Confuso</td>
-                                    <td className="p-2 border-r border-slate-100">Resp. Dor</td>
-                                    <td className="p-2">Inconsciente</td>
                                 </tr>
                                 <tr className="hover:bg-slate-50">
                                     <td className="p-2 text-left font-bold text-slate-800 border-r border-slate-200 bg-slate-50">O2 Suplementar</td>
-                                    <td className="p-2 border-r border-slate-100" colSpan={3}>-</td>
-                                    <td className="p-2 border-r border-slate-100">Não</td>
-                                    <td className="p-2 border-r border-slate-100">Sim</td>
+                                    <td className="p-2 border-r border-slate-100" colSpan={2}>-</td>
                                     <td className="p-2 border-r border-slate-100">-</td>
+                                    <td className="p-2 border-r border-slate-100">Ar Amb. (0)</td>
+                                    <td className="p-2 border-r border-slate-100">-</td>
+                                    <td className="p-2 border-r border-slate-100">Com O2 (+2)</td>
                                     <td className="p-2">-</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                     <div className="mt-4 p-4 border border-rose-200 bg-rose-50 rounded-lg text-rose-900">
-                        <strong>Interpretação:</strong> Pontuação &ge; 5 ou qualquer parâmetro individual com pontuação 3 gera o alerta de <span className="font-bold text-red-700 uppercase">POSSÍVEL DETERIORAÇÃO CLÍNICA</span>.
+                        <strong>Interpretação NEWS 2:</strong> Score 0 = Risco Baixo (Aferir 12h-12h). Score 1-4 = Risco Baixo (Aferir 4h-6h). Score 3 num parâmetro único = Risco Baixo-Médio (Avaliação urgente e SSVV a cada 1h). Score 5-6 = Risco Médio (Resposta urgente pela equipe médica e SSVV a cada 1h). Score &ge; 7 = Risco Alto (Resposta de Emergência / Equipe de Resposta Rápida e Monitoramento Contínuo).
                     </div>
                 </section>
 

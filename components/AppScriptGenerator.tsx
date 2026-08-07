@@ -39,16 +39,17 @@ export const AppScriptGenerator: React.FC<Props> = ({ currentUrl, onSaveUrl }) =
     { id: 'protocol_triggers', name: 'Gatilhos de Protocolos Críticos', status: 'idle', category: 'Motores' },
   ]);
 
-  // Script Backend v62.2 - Mesclado (Login/Auth + HGT Support)
+  // Script Backend v63.0 - Otimizado para Alta Volumetria (15.000+ registros)
   const scriptCode = `
 // =================================================================
 // CÓDIGO PARA GOOGLE APPS SCRIPT (ARQUIVO Código.gs)
+// VERSÃO 63.0 OTIMIZADA PARA ALTA VOLUMETRIA (15.000+ ATENDIMENTOS)
 // NÃO COPIE CÓDIGO REACT/TYPESCRIPT PARA O APPS SCRIPT
 // =================================================================
 
 // --- CONFIGURAÇÕES GERAIS ---
 var APP_NAME = "Triagem Híbrida ESI + CTAS";
-var SCRIPT_VERSION = "v62.2";
+var SCRIPT_VERSION = "v63.0 High-Performance";
 
 function getSafe(obj, path, defaultValue) {
   try {
@@ -64,6 +65,65 @@ function getSafe(obj, path, defaultValue) {
   } catch (e) {
     return defaultValue;
   }
+}
+
+function formatVal(val) {
+  if (val === null || val === undefined) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+  }
+  return String(val).trim();
+}
+
+function formatDateVal(val) {
+  if (val === null || val === undefined) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/yyyy");
+  }
+  var s = String(val).trim();
+  if (s.indexOf('T') !== -1) s = s.split('T')[0];
+  return s;
+}
+
+function formatTimeVal(val) {
+  if (val === null || val === undefined) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "HH:mm");
+  }
+  return String(val).trim();
+}
+
+function parseDateVal(dateVal, timeVal) {
+  if (!dateVal) return null;
+  if (dateVal instanceof Date) {
+    if (timeVal && typeof timeVal === 'string' && timeVal.indexOf(':') !== -1) {
+       var pTime = timeVal.split(':');
+       var d = new Date(dateVal.getTime());
+       d.setHours(parseInt(pTime[0], 10), parseInt(pTime[1], 10));
+       return d;
+    }
+    return dateVal;
+  }
+  var sStr = String(dateVal).trim().split(' ')[0];
+  var day = 0, month = 0, year = 0;
+  if (sStr.indexOf('/') !== -1) {
+     var p = sStr.split('/');
+     day = parseInt(p[0], 10); month = parseInt(p[1], 10) - 1; year = parseInt(p[2], 10);
+  } else if (sStr.indexOf('-') !== -1) {
+     var p = sStr.split('-');
+     if (p[0].length === 4) { year = parseInt(p[0], 10); month = parseInt(p[1], 10) - 1; day = parseInt(p[2], 10); }
+     else { day = parseInt(p[0], 10); month = parseInt(p[1], 10) - 1; year = parseInt(p[2], 10); }
+  }
+  if (year > 0 && year < 100) year += 2000;
+  if (year === 0) return null;
+
+  var hours = 0, minutes = 0;
+  if (timeVal) {
+     var tStr = formatTimeVal(timeVal);
+     var tParts = tStr.split(':');
+     if (tParts.length >= 2) { hours = parseInt(tParts[0], 10); minutes = parseInt(tParts[1], 10); }
+  }
+  return new Date(year, month, day, hours, minutes);
 }
 
 function ensureHeader(sheet, headers, color) {
@@ -103,7 +163,6 @@ function setupStructure() {
   
   var sheetPatients = ss.getSheets()[0];
   if (sheetPatients.getName() !== "Pacientes") sheetPatients.setName("Pacientes");
-  // Adicionado coluna HGT no final (index 23)
   var headersPatients = [
       "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Reavaliação?", "Idade", "Queixa", "PA", "FC", "FR", "Temp", "SpO2", "GCS", "Dor", 
@@ -118,7 +177,6 @@ function setupStructure() {
   
   var sheetInternation = ss.getSheetByName("Pacientes internados");
   if (!sheetInternation) sheetInternation = ss.insertSheet("Pacientes internados");
-  // Adicionado coluna HGT no final (index 23)
   var headersInternation = [
       "Data/Hora Registro", "Data Avaliação", "Hora Avaliação", "Nome", "Prontuário", 
       "Data Nascimento", "Setor", "Leito", "Reavaliação?",
@@ -127,7 +185,7 @@ function setupStructure() {
   ];
   ensureHeader(sheetInternation, headersInternation, "#9fc5e8");
 
-  return "Estrutura v62.2 OK.";
+  return "Estrutura v63.0 OK.";
 }
 
 function doGet(e) {
@@ -139,101 +197,200 @@ function doGet(e) {
     
     if (!action) {
        setupStructure();
-       return jsonResponse({ "result": "success", "message": "Script v62.2 Online" });
+       return jsonResponse({ "result": "success", "message": "Script v63.0 Online (Alta Volumetria)" });
     }
 
     if (action === 'diagnostic') {
        var diag = { email: false, sheets: false, version: SCRIPT_VERSION, remainingEmails: 0 };
-       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); diag.email = true; } catch(e) {}
-       try { ss.getSheets()[0].getName(); diag.sheets = true; } catch(e) {}
+       try { diag.remainingEmails = MailApp.getRemainingDailyQuota(); diag.email = true; } catch(err) {}
+       try { ss.getSheets()[0].getName(); diag.sheets = true; } catch(err) {}
        return jsonResponse({ "result": "success", "data": diag });
     }
 
+    // BUSCA OTIMIZADA PARA HISTÓRICO COM SERVERSIDE FILTERING & BOTTOM-UP SCANNING
     if (action === 'filterHistory') {
-       var searchId = e.parameter.medicalRecord ? String(e.parameter.medicalRecord).trim() : "";
-       var searchDate = e.parameter.date ? String(e.parameter.date).trim() : "";
-       var resultRows = [];
+       var searchId = e.parameter.medicalRecord ? String(e.parameter.medicalRecord).trim().toLowerCase() : "";
+       var mode = e.parameter.mode ? String(e.parameter.mode).trim() : "24h";
+       var startDateStr = e.parameter.startDate ? String(e.parameter.startDate).trim() : "";
+       var endDateStr = e.parameter.endDate ? String(e.parameter.endDate).trim() : "";
+       var limit = parseInt(e.parameter.limit || "500", 10);
        
+       var now = new Date();
+       var cutoff24h = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+       var startDateObj = startDateStr ? new Date(startDateStr + "T00:00:00") : null;
+       var endDateObj = endDateStr ? new Date(endDateStr + "T23:59:59") : null;
+
+       var resultRows = [];
+
+       // 1. Triage Sheet (Bottom-Up)
        var sheetTriage = ss.getSheets()[0];
-       var valsT = sheetTriage.getDataRange().getDisplayValues();
-       for (var i = 1; i < valsT.length; i++) {
+       var valsT = sheetTriage.getDataRange().getValues();
+       for (var i = valsT.length - 1; i >= 1; i--) {
           var row = valsT[i];
-          if (matchFilter(row[4], row[1], row[0], searchId, searchDate)) {
+          var recId = formatVal(row[4]).toLowerCase();
+
+          if (searchId && recId !== searchId && recId.indexOf(searchId) === -1) {
+             continue;
+          }
+
+          var rowDateObj = parseDateVal(row[1] || row[0], row[2]);
+
+          if (mode === '24h' && !searchId) {
+             if (rowDateObj && rowDateObj < cutoff24h) {
+                break; // Parada antecipada: dados antigos
+             }
+          } else if (mode === 'range' && !searchId) {
+             if (rowDateObj) {
+                if (endDateObj && rowDateObj > endDateObj) continue;
+                if (startDateObj && rowDateObj < startDateObj) {
+                   break; // Parada antecipada
+                }
+             }
+          }
+
+          resultRows.push({
+             source: 'triage',
+             systemTimestamp: formatVal(row[0]), 
+             evaluationDate: formatDateVal(row[1]) || formatVal(row[0]).split(' ')[0], 
+             evaluationTime: formatTimeVal(row[2]), 
+             name: formatVal(row[3]), 
+             medicalRecord: formatVal(row[4]), 
+             age: formatVal(row[6]), 
+             complaint: formatVal(row[7]), 
+             esiLevel: formatVal(row[15]), 
+             triageTitle: formatVal(row[16]), 
+             discriminators: formatVal(row[19]),
+             dob: formatDateVal(row[20]), 
+             status: formatVal(row[22]),
+             vitals: { pa: formatVal(row[8]), fc: formatVal(row[9]), fr: formatVal(row[10]), temp: formatVal(row[11]), spo2: formatVal(row[12]), pain: formatVal(row[14]), hgt: formatVal(row[23]) }
+          });
+
+          if (resultRows.length >= limit) break;
+       }
+
+       // 2. Internation Sheet (Bottom-Up)
+       var sheetInt = ss.getSheetByName("Pacientes internados");
+       if (sheetInt) {
+          var valsI = sheetInt.getDataRange().getValues();
+          for (var j = valsI.length - 1; j >= 1; j--) {
+             var rowI = valsI[j];
+             var recIdI = formatVal(rowI[4]).toLowerCase();
+
+             if (searchId && recIdI !== searchId && recIdI.indexOf(searchId) === -1) {
+                continue;
+             }
+
+             var rowDateObjI = parseDateVal(rowI[1] || rowI[0], rowI[2]);
+
+             if (mode === '24h' && !searchId) {
+                if (rowDateObjI && rowDateObjI < cutoff24h) break;
+             } else if (mode === 'range' && !searchId) {
+                if (rowDateObjI) {
+                   if (endDateObj && rowDateObjI > endDateObj) continue;
+                   if (startDateObj && rowDateObjI < startDateObj) break;
+                }
+             }
+
              resultRows.push({
-                source: 'triage',
-                systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], 
-                name: row[3], medicalRecord: row[4], age: row[6], complaint: row[7], 
-                esiLevel: row[15], triageTitle: row[16], discriminators: row[19],
-                dob: row[20], 
-                status: row[22] || '',
-                vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14], hgt: row[23] || '' }
+                source: 'internation',
+                systemTimestamp: formatVal(rowI[0]), 
+                evaluationDate: formatDateVal(rowI[1]), 
+                evaluationTime: formatTimeVal(rowI[2]), 
+                name: formatVal(rowI[3]), 
+                medicalRecord: formatVal(rowI[4]), 
+                dob: formatDateVal(rowI[5]), 
+                sector: formatVal(rowI[6]), 
+                bed: formatVal(rowI[7]), 
+                isReevaluation: formatVal(rowI[8]),
+                newsScore: formatVal(rowI[19]), 
+                riskText: formatVal(rowI[20]), 
+                observations: formatVal(rowI[18]),
+                status: formatVal(rowI[22]),
+                vitals: { pas: formatVal(rowI[9]), pad: formatVal(rowI[10]), fc: formatVal(rowI[11]), fr: formatVal(rowI[12]), temp: formatVal(rowI[13]), spo2: formatVal(rowI[14]), consc: formatVal(rowI[15]), o2: formatVal(rowI[16]), pain: formatVal(rowI[17]), hgt: formatVal(rowI[23]) }
              });
+
+             if (resultRows.length >= limit * 2) break;
           }
        }
 
-       var sheetInt = ss.getSheetByName("Pacientes internados");
-       if (sheetInt) {
-          var valsI = sheetInt.getDataRange().getDisplayValues();
-          for (var j = 1; j < valsI.length; j++) {
-             var rowI = valsI[j];
-             if (matchFilter(rowI[4], rowI[1], rowI[0], searchId, searchDate)) {
-                resultRows.push({
-                   source: 'internation',
-                   systemTimestamp: rowI[0], evaluationDate: rowI[1], evaluationTime: rowI[2], 
-                   name: rowI[3], medicalRecord: rowI[4], dob: rowI[5], 
-                   sector: rowI[6], bed: rowI[7], isReevaluation: rowI[8],
-                   newsScore: rowI[19], riskText: rowI[20], observations: rowI[18],
-                   status: rowI[22] || '',
-                   vitals: { pas: rowI[9], pad: rowI[10], fc: rowI[11], fr: rowI[12], temp: rowI[13], spo2: rowI[14], consc: rowI[15], o2: rowI[16], pain: rowI[17], hgt: rowI[23] || '' }
-                });
-             }
-          }
-       }
-       return jsonResponse({ "result": "success", "data": resultRows.reverse() });
+       // Ordenar por data mais recente
+       resultRows.sort(function(a, b) {
+          var dA = parseDateVal(a.evaluationDate || a.systemTimestamp, a.evaluationTime);
+          var dB = parseDateVal(b.evaluationDate || b.systemTimestamp, b.evaluationTime);
+          return (dB ? dB.getTime() : 0) - (dA ? dA.getTime() : 0);
+       });
+
+       return jsonResponse({ "result": "success", "data": resultRows.slice(0, limit) });
     }
 
     if (action === 'getAll') {
        var sheet = ss.getSheets()[0];
-       var values = sheet.getDataRange().getDisplayValues();
+       var values = sheet.getDataRange().getValues();
        if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
-       var rows = values.slice(1).map(function(row) {
-         return {
-           systemTimestamp: row[0], evaluationDate: row[1] || row[0].split(' ')[0], evaluationTime: row[2], name: row[3], medicalRecord: row[4], isReevaluation: row[5], age: row[6], complaint: row[7], 
-           esiLevel: row[15], triageTitle: row[16], discriminators: row[19], 
-           dob: row[20], 
-           status: row[22] || '',
-           vitals: { pa: row[8], fc: row[9], fr: row[10], temp: row[11], spo2: row[12], pain: row[14], hgt: row[23] || '' }
-         };
-       });
-       return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) });
+       var rows = [];
+       var maxLimit = 2000; // Limita aos 2.000 mais recentes para performance máxima
+       for (var i = values.length - 1; i >= 1; i--) {
+         var row = values[i];
+         rows.push({
+           systemTimestamp: formatVal(row[0]), 
+           evaluationDate: formatDateVal(row[1]) || formatVal(row[0]).split(' ')[0], 
+           evaluationTime: formatTimeVal(row[2]), 
+           name: formatVal(row[3]), 
+           medicalRecord: formatVal(row[4]), 
+           isReevaluation: formatVal(row[5]), 
+           age: formatVal(row[6]), 
+           complaint: formatVal(row[7]), 
+           esiLevel: formatVal(row[15]), 
+           triageTitle: formatVal(row[16]), 
+           discriminators: formatVal(row[19]), 
+           dob: formatDateVal(row[20]), 
+           status: formatVal(row[22]),
+           vitals: { pa: formatVal(row[8]), fc: formatVal(row[9]), fr: formatVal(row[10]), temp: formatVal(row[11]), spo2: formatVal(row[12]), pain: formatVal(row[14]), hgt: formatVal(row[23]) }
+         });
+         if (rows.length >= maxLimit) break;
+       }
+       return jsonResponse({ "result": "success", "data": rows });
     }
 
     if (action === 'getAllInternation') {
       var sheetInt = ss.getSheetByName("Pacientes internados");
       if (!sheetInt) return jsonResponse({ "result": "success", "data": [] });
-      var values = sheetInt.getDataRange().getDisplayValues();
+      var values = sheetInt.getDataRange().getValues();
       if (values.length <= 1) return jsonResponse({ "result": "success", "data": [] });
-      var rows = values.slice(1).map(function(row) {
-        return {
-          systemTimestamp: row[0], evaluationDate: row[1], evaluationTime: row[2], name: row[3], medicalRecord: row[4], dob: row[5], sector: row[6], bed: row[7], isReevaluation: row[8],
-          vitals: { pas: row[9], pad: row[10], fc: row[11], fr: row[12], temp: row[13], spo2: row[14], consciousness: row[15], o2Sup: row[16], painLevel: row[17], hgt: row[23] || '' },
-          observations: row[18], newsScore: row[19], riskText: row[20], status: row[22] || ''
-        };
-      });
-      return jsonResponse({ "result": "success", "data": rows.reverse().slice(0, 5000) }); 
+      var rows = [];
+      var maxLimit = 2000;
+      for (var j = values.length - 1; j >= 1; j--) {
+        var row = values[j];
+        rows.push({
+          systemTimestamp: formatVal(row[0]), 
+          evaluationDate: formatDateVal(row[1]), 
+          evaluationTime: formatTimeVal(row[2]), 
+          name: formatVal(row[3]), 
+          medicalRecord: formatVal(row[4]), 
+          dob: formatDateVal(row[5]), 
+          sector: formatVal(row[6]), 
+          bed: formatVal(row[7]), 
+          isReevaluation: formatVal(row[8]),
+          vitals: { pas: formatVal(row[9]), pad: formatVal(row[10]), fc: formatVal(row[11]), fr: formatVal(row[12]), temp: formatVal(row[13]), spo2: formatVal(row[14]), consciousness: formatVal(row[15]), o2Sup: formatVal(row[16]), painLevel: formatVal(row[17]), hgt: formatVal(row[23]) },
+          observations: formatVal(row[18]), 
+          newsScore: formatVal(row[19]), 
+          riskText: formatVal(row[20]), 
+          status: formatVal(row[22])
+        });
+        if (rows.length >= maxLimit) break;
+      }
+      return jsonResponse({ "result": "success", "data": rows }); 
     }
 
     if (action === 'search') {
-      var recordToFind = e.parameter.medicalRecord;
+      var recordToFind = String(e.parameter.medicalRecord || '').trim().toLowerCase();
       var sheet = ss.getSheets()[0];
-      var values = sheet.getDataRange().getDisplayValues();
+      var values = sheet.getDataRange().getValues();
       for (var i = values.length - 1; i >= 1; i--) {
-        if (String(values[i][4]).trim() === String(recordToFind).trim()) {
-          // Busca HGT da coluna 23 se existir
-          var hgtVal = values[i][23] || '';
+        if (formatVal(values[i][4]).toLowerCase() === recordToFind) {
           return jsonResponse({ "result": "found", "history": { 
-              "name": values[i][3], "lastDate": values[i][1], "lastTime": values[i][2], "ageString": values[i][6], "dob": values[i][20], "lastEsi": values[i][15], 
-              "lastVitals": { pa: values[i][8], fc: values[i][9], fr: values[i][10], temp: values[i][11], spo2: values[i][12], gcs: values[i][13], pain: values[i][14], hgt: hgtVal } 
+              "name": formatVal(values[i][3]), "lastDate": formatDateVal(values[i][1]), "lastTime": formatTimeVal(values[i][2]), "ageString": formatVal(values[i][6]), "dob": formatDateVal(values[i][20]), "lastEsi": formatVal(values[i][15]), 
+              "lastVitals": { pa: formatVal(values[i][8]), fc: formatVal(values[i][9]), fr: formatVal(values[i][10]), temp: formatVal(values[i][11]), spo2: formatVal(values[i][12]), gcs: formatVal(values[i][13]), pain: formatVal(values[i][14]), hgt: formatVal(values[i][23]) } 
           } });
         }
       }
@@ -241,21 +398,19 @@ function doGet(e) {
     }
     
     if (action === 'searchInternation') {
-      var recordToFind = e.parameter.medicalRecord;
+      var recordToFind = String(e.parameter.medicalRecord || '').trim().toLowerCase();
       var sheetInt = ss.getSheetByName("Pacientes internados");
       if (sheetInt) {
-         var vals = sheetInt.getDataRange().getDisplayValues();
+         var vals = sheetInt.getDataRange().getValues();
          for (var i = vals.length - 1; i >= 1; i--) {
-            if (String(vals[i][4]).trim() === String(recordToFind).trim()) {
-               var hgtVal = vals[i][23] || '';
+            if (formatVal(vals[i][4]).toLowerCase() === recordToFind) {
                return jsonResponse({ "result": "found", "source": "internation", "history": { 
-                   "name": vals[i][3], "dob": vals[i][5], "sector": vals[i][6], "bed": vals[i][7], "lastDate": vals[i][1], "lastTime": vals[i][2], "newsScore": vals[i][19], 
-                   "lastVitals": { pas: vals[i][9], pad: vals[i][10], fc: vals[i][11], fr: vals[i][12], temp: vals[i][13], spo2: vals[i][14], consc: vals[i][15], o2: vals[i][16], pain: vals[i][17], hgt: hgtVal }
+                   "name": formatVal(vals[i][3]), "dob": formatDateVal(vals[i][5]), "sector": formatVal(vals[i][6]), "bed": formatVal(vals[i][7]), "lastDate": formatDateVal(vals[i][1]), "lastTime": formatTimeVal(vals[i][2]), "newsScore": formatVal(vals[i][19]), 
+                   "lastVitals": { pas: formatVal(vals[i][9]), pad: formatVal(vals[i][10]), fc: formatVal(vals[i][11]), fr: formatVal(vals[i][12]), temp: formatVal(vals[i][13]), spo2: formatVal(vals[i][14]), consc: formatVal(vals[i][15]), o2: formatVal(vals[i][16]), pain: formatVal(vals[i][17]), hgt: formatVal(vals[i][23]) }
                } });
             }
          }
       }
-      // Fallback para buscar na triagem se não achar na internação
       return doGet({ parameter: { action: 'search', medicalRecord: recordToFind } });
     }
 
@@ -265,22 +420,6 @@ function doGet(e) {
   } finally {
     lock.releaseLock();
   }
-}
-
-function matchFilter(rowId, rowDate, rowSystemDate, searchId, searchDate) {
-    var matchId = !searchId || String(rowId).trim() === searchId;
-    var matchDate = true;
-    if (searchDate) {
-        var dParts = String(rowDate).includes('/') ? rowDate.split('/') : rowDate.split('-');
-        var isoDate = (dParts.length === 3) ? (dParts[0].length === 4 ? dParts.join('-') : dParts[2] + '-' + dParts[1] + '-' + dParts[0]) : "";
-        
-        if ((!isoDate || isoDate.length < 10) && rowSystemDate) {
-            var sParts = String(rowSystemDate).split(' ')[0].split(rowSystemDate.includes('/') ? '/' : '-');
-            isoDate = (sParts.length === 3) ? (sParts[0].length === 4 ? sParts.join('-') : sParts[2] + '-' + sParts[1] + '-' + sParts[0]) : "";
-        }
-        matchDate = (isoDate === searchDate);
-    }
-    return matchId && matchDate;
 }
 
 function doPost(e) {
@@ -297,8 +436,8 @@ function doPost(e) {
 
         var sheetTriage = ss.getSheets()[0];
         var sheetInt = ss.getSheetByName("Pacientes internados");
-        var triageData = sheetTriage.getDataRange().getDisplayValues();
-        var intData = sheetInt ? sheetInt.getDataRange().getDisplayValues() : [];
+        var triageData = sheetTriage.getDataRange().getValues();
+        var intData = sheetInt ? sheetInt.getDataRange().getValues() : [];
         var count = 0;
 
         for (var k = 0; k < items.length; k++) {
@@ -307,11 +446,11 @@ function doPost(e) {
            var targetData = (item.source === 'internation') ? intData : triageData;
            if (!targetSheet) continue;
 
-           for (var i = 1; i < targetData.length; i++) {
-               var rowTs = String(targetData[i][0]).trim(); 
-               var rowMr = String(targetData[i][4]).trim(); 
+           for (var i = targetData.length - 1; i >= 1; i--) {
+               var rowTs = formatVal(targetData[i][0]); 
+               var rowMr = formatVal(targetData[i][4]); 
                
-               if (rowTs === String(item.systemTimestamp).trim() && rowMr === String(item.medicalRecord).trim()) {
+               if (rowTs === formatVal(item.systemTimestamp) && rowMr === formatVal(item.medicalRecord)) {
                    targetSheet.getRange(i + 1, 23).setValue("INVALIDADO");
                    count++;
                    break; 
@@ -324,7 +463,6 @@ function doPost(e) {
 
     if (data.action === 'saveInternation') {
        var sheetInt = ss.getSheetByName("Pacientes internados");
-       // Adicionado HGT no final
        sheetInt.appendRow([
           nowFormatted, getSafe(data, 'patient.evaluationDate', ''), getSafe(data, 'patient.evaluationTime', ''), getSafe(data, 'patient.name', ''), getSafe(data, 'patient.medicalRecord', ''),
           getSafe(data, 'patient.dob', ''), getSafe(data, 'patient.sector', ''), getSafe(data, 'patient.bed', ''), data.patient && data.patient.isReevaluation ? "SIM" : "NÃO",
@@ -338,7 +476,6 @@ function doPost(e) {
 
     if (!data.action || data.action === 'save') {
       var sheet = ss.getSheets()[0]; 
-      // Adicionado HGT no final
       sheet.appendRow([
         nowFormatted, getSafe(data, 'patient.evaluationDate', ''), getSafe(data, 'patient.evaluationTime', ''), getSafe(data, 'patient.name', ''), getSafe(data, 'patient.medicalRecord', ''), 
         data.patient && data.patient.isReevaluation ? "SIM" : "NÃO", getSafe(data, 'patient.age', '0') + " " + getSafe(data, 'patient.ageUnit', ''), getSafe(data, 'patient.complaint', ''), 
@@ -353,11 +490,11 @@ function doPost(e) {
     
     if (data.action === 'login') {
        var sheetUsers = ss.getSheetByName("Usuários");
-       var users = sheetUsers.getDataRange().getDisplayValues();
+       var users = sheetUsers.getDataRange().getValues();
        var loginEmail = String(data.email || "").toLowerCase().trim();
        for (var i = 1; i < users.length; i++) {
-          if (String(users[i][2]).toLowerCase().trim() === loginEmail) {
-             if (String(users[i][4]).trim() === String(data.password).trim()) return jsonResponse({ "result": "success", "user": { "name": users[i][1], "email": users[i][2], "sector": users[i][3] } });
+          if (formatVal(users[i][2]).toLowerCase() === loginEmail) {
+             if (formatVal(users[i][4]) === String(data.password).trim()) return jsonResponse({ "result": "success", "user": { "name": users[i][1], "email": users[i][2], "sector": users[i][3] } });
              return jsonResponse({ "result": "error", "message": "Senha incorreta." });
           }
        }
@@ -367,15 +504,15 @@ function doPost(e) {
     if (data.action === 'registerUser') {
         var sheetUsers = ss.getSheetByName("Usuários");
         sheetUsers.appendRow([new Date(), data.name, data.email.toLowerCase(), data.sector, data.password]);
-        try { sendEmailRobust(data.email, "Acesso Liberado - " + APP_NAME, "Cadastro realizado.", ss); } catch(e) {}
+        try { sendEmailRobust(data.email, "Acesso Liberado - " + APP_NAME, "Cadastro realizado.", ss); } catch(err) {}
         return jsonResponse({ "result": "success" });
     }
 
     if (data.action === 'recoverPassword') {
         var sheetUsers = ss.getSheetByName("Usuários");
-        var users = sheetUsers.getDataRange().getDisplayValues();
+        var users = sheetUsers.getDataRange().getValues();
         for (var i = 1; i < users.length; i++) {
-            if (String(users[i][2]).toLowerCase().trim() === String(data.email).toLowerCase().trim()) {
+            if (formatVal(users[i][2]).toLowerCase() === String(data.email).toLowerCase().trim()) {
                 sendEmailRobust(data.email, "Recuperação de Senha", "Sua senha é: " + users[i][4], ss);
                 return jsonResponse({ "result": "success" });
             }

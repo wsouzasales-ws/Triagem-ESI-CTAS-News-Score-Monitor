@@ -111,17 +111,25 @@ export const HistorySection: React.FC<Props> = ({ scriptUrl }) => {
     
     try {
       const timestamp = Date.now();
-      const data = await fetchWithRetry(`${scriptUrl}?action=filterHistory&medicalRecord=${encodeURIComponent(searchId)}&_=${timestamp}`, { method: 'GET' });
+      let queryUrl = `${scriptUrl}?action=filterHistory&mode=${filterMode}&_=${timestamp}`;
+      if (searchId.trim()) {
+        queryUrl += `&medicalRecord=${encodeURIComponent(searchId.trim())}`;
+      }
+      if (filterMode === 'range' && dateRange.start && dateRange.end) {
+        queryUrl += `&startDate=${encodeURIComponent(dateRange.start)}&endDate=${encodeURIComponent(dateRange.end)}`;
+      }
+
+      const data = await fetchWithRetry(queryUrl, { method: 'GET' });
 
       if (data.result === 'success') {
         let allRows = data.data || [];
-        if (filterMode === '24h') {
+        if (filterMode === '24h' && !searchId.trim()) {
           const now = new Date();
           allRows = allRows.filter((r: any) => {
             const d = parseDateRobust(r.systemTimestamp || r.evaluationDate, r.evaluationTime);
             return d && (now.getTime() - d.getTime() <= 86400000);
           });
-        } else if (filterMode === 'range' && dateRange.start && dateRange.end) {
+        } else if (filterMode === 'range' && dateRange.start && dateRange.end && !searchId.trim()) {
           const start = new Date(`${dateRange.start}T00:00:00`);
           const end = new Date(`${dateRange.end}T23:59:59`);
           allRows = allRows.filter((r: any) => {

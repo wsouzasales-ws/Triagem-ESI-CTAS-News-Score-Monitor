@@ -9,7 +9,8 @@ export interface VitalSigns {
   gcs: number;
   painLevel: number | '';
   o2Sup?: boolean;
-  consciousness?: 'Alert' | 'Confused' | 'Pain' | 'Unresponsive';
+  consciousness?: 'Alert' | 'Confused' | 'Voice' | 'Pain' | 'Unresponsive';
+  isCopd?: boolean; // Escala 2 de SpO2 do NEWS 2 (DPOC / Insuficiência Respiratória Hipercápnica)
   hgt?: string; // Novo campo Dextro (Hemoglucoteste)
 }
 

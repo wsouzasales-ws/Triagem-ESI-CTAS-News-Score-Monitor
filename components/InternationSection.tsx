@@ -46,7 +46,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
   });
 
   const [vitals, setVitals] = useState<VitalSigns>({
-    pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', hgt: ''
+    pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', isCopd: false, hgt: ''
   });
 
   const [observations, setObservations] = useState('');
@@ -140,7 +140,7 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
     try {
         await fetchWithRetry(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveInternation', patient: {...patient, isReevaluation: !!patient.isReevaluation}, vitals: {...vitals, painLevel: String(vitals.painLevel), gcs: String(vitals.gcs)}, news: newsResult, observations: finalObs, user: currentUser?.name || 'Desconhecido' }) });
         setNotification({ msg: 'Salvo com sucesso!', type: 'success' });
-        setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', hgt: '' });
+        setVitals({ pas: '', pad: '', fc: '', fr: '', temp: '', spo2: '', gcs: 15, painLevel: '', o2Sup: false, consciousness: 'Alert', isCopd: false, hgt: '' });
         setObservations(''); setSelectedSymptoms([]); setInternationHistory(null);
         setPatient(prev => ({...prev, name: '', medicalRecord: '', dob: '', isReevaluation: false, sector: '', bed: ''}));
     } catch (e: any) { setNotification({ msg: `Erro: ${e.message}`, type: 'error' }); }
@@ -183,11 +183,11 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      {isGeneratingPdf && <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center text-white"><div className="animate-spin rounded-full h-16 w-16 border-4 border-teal-500 border-t-transparent mb-4"></div><h2 className="text-xl font-bold">Processando Relatório NEWS...</h2></div>}
+      {isGeneratingPdf && <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center text-white"><div className="animate-spin rounded-full h-16 w-16 border-4 border-teal-500 border-t-transparent mb-4"></div><h2 className="text-xl font-bold">Processando Relatório NEWS 2...</h2></div>}
       
       <div className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none"><div id="internation-report-content" style={{ width: '794px', backgroundColor: 'white' }}><PrintableReport patient={{...patient, complaint: observations}} vitals={vitals} triageResult={newsResult} source="internation" /></div></div>
 
-      <div className="text-center"><h2 className="text-2xl font-black text-[#0d9488] uppercase tracking-wide">NEWS UNIDADE DE INTERNAÇÃO</h2></div>
+      <div className="text-center"><h2 className="text-2xl font-black text-[#0d9488] uppercase tracking-wide">NEWS 2 - DETERIORAÇÃO CLÍNICA (INTERNAÇÃO)</h2></div>
       
       {/* SEÇÃO IDENTIFICAÇÃO - REESCRITA PARA FICAR IDÊNTICA À FOTO */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
@@ -315,21 +315,37 @@ export const InternationSection: React.FC<Props> = ({ scriptUrl, handleSyncFromS
           {renderVitalInput('SATURAÇÃO O2', 'spo2', '%')}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <span className="text-xs font-bold text-slate-700 uppercase">USO DE O2 SUPLEMENTAR?</span>
+            <div>
+              <span className="text-xs font-bold text-slate-700 uppercase block">O2 SUPLEMENTAR?</span>
+              <span className="text-[9px] text-slate-500 font-semibold">Ar Ambiente (0) | O2 (+2)</span>
+            </div>
             <div className="flex bg-slate-200 p-1 rounded-lg gap-1">
-              <button onClick={() => setVitals(p => ({...p, o2Sup: false}))} className={`px-6 py-2 rounded-md text-xs font-bold transition-all ${!vitals.o2Sup ? 'bg-[#2d3748] text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>NÃO</button>
-              <button onClick={() => setVitals(p => ({...p, o2Sup: true}))} className={`px-6 py-2 rounded-md text-xs font-bold transition-all ${vitals.o2Sup ? 'bg-[#0d9488] text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>SIM</button>
+              <button onClick={() => setVitals(p => ({...p, o2Sup: false}))} className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${!vitals.o2Sup ? 'bg-[#2d3748] text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>NÃO</button>
+              <button onClick={() => setVitals(p => ({...p, o2Sup: true}))} className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${vitals.o2Sup ? 'bg-[#0d9488] text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>SIM (+2)</button>
             </div>
           </div>
+
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <span className="text-xs font-bold text-slate-700 uppercase">NÍVEL CONSCIÊNCIA</span>
-            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-sm font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white">
-              <option value="Alert">Alerta (A)</option>
-              <option value="Confused">Confuso (C)</option>
-              <option value="Pain">Dor (P)</option>
-              <option value="Unresponsive">Inconsciente (U)</option>
+            <div>
+              <span className="text-xs font-bold text-slate-700 uppercase block">PACIENTE DPOC / RETENTOR CO2?</span>
+              <span className="text-[9px] text-slate-500 font-semibold">Escala 2 de SpO2 (Alvo 88-92%)</span>
+            </div>
+            <div className="flex bg-slate-200 p-1 rounded-lg gap-1">
+              <button onClick={() => setVitals(p => ({...p, isCopd: false}))} className={`px-3 py-2 rounded-md text-xs font-bold transition-all ${!vitals.isCopd ? 'bg-[#2d3748] text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>NÃO</button>
+              <button onClick={() => setVitals(p => ({...p, isCopd: true}))} className={`px-3 py-2 rounded-md text-xs font-bold transition-all ${vitals.isCopd ? 'bg-amber-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>SIM</button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <span className="text-xs font-bold text-slate-700 uppercase">CONSCIÊNCIA (ACVPU)</span>
+            <select value={vitals.consciousness} onChange={e => setVitals(p => ({...p, consciousness: e.target.value as any}))} className="p-2.5 rounded-lg text-xs font-bold outline-none border-2 border-emerald-500 text-emerald-900 bg-white">
+              <option value="Alert">Alerta (A) [0]</option>
+              <option value="Confused">Nova Confusão Mental (C) [3]</option>
+              <option value="Voice">Responde à Voz (V) [3]</option>
+              <option value="Pain">Responde à Dor (P) [3]</option>
+              <option value="Unresponsive">Inconsciente (U) [3]</option>
             </select>
           </div>
         </div>

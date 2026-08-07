@@ -17,7 +17,7 @@ const TriageHybridLogo = () => (
     </svg>
     <div className="flex flex-col leading-none" style={{ textAlign: 'left' }}>
       <span className="text-[13px] font-black text-slate-800 uppercase tracking-tight">Triagem Híbrida <span className="text-rose-600">ESI + CTAS</span></span>
-      <span className="text-[8px] font-bold text-emerald-600 tracking-widest uppercase mt-1">+ NEWS SCORE MONITORAMENTO</span>
+      <span className="text-[8px] font-bold text-emerald-600 tracking-widest uppercase mt-1">+ NEWS 2 SCORE MONITORAMENTO</span>
     </div>
   </div>
 );
@@ -75,7 +75,7 @@ export const PrintableReport: React.FC<Props> = ({ patient, vitals, triageResult
         <TriageHybridLogo />
         <div className="text-center">
             <h2 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
-                {isInternation ? 'Relatório NEWS de Internação' : 'Relatório de Classificação ESI'}
+                {isInternation ? 'Relatório NEWS 2 de Internação' : 'Relatório de Classificação ESI'}
             </h2>
             <div className={`h-0.5 w-12 mx-auto ${isInternation ? 'bg-emerald-500' : 'bg-rose-600'}`}></div>
         </div>
@@ -177,7 +177,7 @@ export const PrintableReport: React.FC<Props> = ({ patient, vitals, triageResult
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
           
           <h3 className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em] mb-6">
-            {isInternation ? 'Escore NEWS (Deterioração Clínica)' : 'Classificação de Risco Institucional'}
+            {isInternation ? 'Escore NEWS 2 (Deterioração Clínica)' : 'Classificação de Risco Institucional'}
           </h3>
           
           <div className="flex flex-col items-center justify-center gap-4">
@@ -185,7 +185,7 @@ export const PrintableReport: React.FC<Props> = ({ patient, vitals, triageResult
                 className={`inline-flex items-center justify-center px-12 py-5 rounded-xl text-white font-black shadow-2xl border-4 border-white/20`}
                 style={{ backgroundColor: getBadgeColor(), fontSize: isInternation ? '42px' : '28px', lineHeight: '1' }}
               >
-                {isInternation ? `NEWS ${triageResult.score}` : triageResult.title}
+                {isInternation ? `NEWS 2: ${triageResult.score}` : triageResult.title}
               </div>
 
               <div className="w-full max-w-md bg-white/5 backdrop-blur-md rounded-lg p-4 border border-white/10 mt-2">

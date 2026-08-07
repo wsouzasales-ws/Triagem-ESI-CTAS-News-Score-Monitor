@@ -217,6 +217,73 @@ const DashboardSection: React.FC<Props> = React.memo(({
     }
   };
 
+  type VitalStatus = 'normal' | 'warning' | 'critical';
+
+  const parsePasValue = (paStr?: string, pasExplicit?: string | number): number => {
+    if (pasExplicit !== undefined && pasExplicit !== '' && pasExplicit !== null) {
+      const n = parseInt(String(pasExplicit));
+      if (!isNaN(n) && n > 0) return n;
+    }
+    if (!paStr) return 0;
+    const match = String(paStr).match(/\d+/);
+    return match ? parseInt(match[0]) : 0;
+  };
+
+  const getPasStatus = (paStr?: string, pasExplicit?: string | number): VitalStatus => {
+    const pas = parsePasValue(paStr, pasExplicit);
+    if (!pas) return 'normal';
+    if (pas <= 90 || pas >= 220) return 'critical';
+    if (pas >= 91 && pas <= 110) return 'warning';
+    return 'normal';
+  };
+
+  const getFcStatus = (val?: string | number): VitalStatus => {
+    const fc = parseInt(String(val || '')) || 0;
+    if (!fc) return 'normal';
+    if (fc <= 40 || fc >= 131) return 'critical';
+    if ((fc >= 41 && fc <= 50) || (fc >= 91 && fc <= 130)) return 'warning';
+    return 'normal';
+  };
+
+  const getFrStatus = (val?: string | number): VitalStatus => {
+    const fr = parseInt(String(val || '')) || 0;
+    if (!fr) return 'normal';
+    if (fr <= 8 || fr >= 25) return 'critical';
+    if ((fr >= 9 && fr <= 11) || (fr >= 21 && fr <= 24)) return 'warning';
+    return 'normal';
+  };
+
+  const getTempStatus = (val?: string | number): VitalStatus => {
+    if (!val) return 'normal';
+    const temp = parseFloat(String(val).replace(',', '.')) || 0;
+    if (!temp) return 'normal';
+    if (temp <= 35.0) return 'critical';
+    if ((temp >= 35.1 && temp <= 36.0) || temp >= 38.1) return 'warning';
+    return 'normal';
+  };
+
+  const getSpo2Status = (val?: string | number): VitalStatus => {
+    const spo2 = parseInt(String(val || '')) || 0;
+    if (!spo2) return 'normal';
+    if (spo2 <= 91) return 'critical';
+    if (spo2 >= 92 && spo2 <= 95) return 'warning';
+    return 'normal';
+  };
+
+  const getO2Status = (val?: boolean | string): VitalStatus => {
+    if (!val) return 'normal';
+    const s = String(val).toUpperCase().trim();
+    if (s === 'SIM' || s === 'TRUE' || val === true) return 'warning';
+    return 'normal';
+  };
+
+  const getPainStatus = (val?: string | number): VitalStatus => {
+    const p = parseInt(String(val || '')) || 0;
+    if (p >= 7) return 'critical';
+    if (p >= 4) return 'warning';
+    return 'normal';
+  };
+
   const getNewsBadge = (scoreStr: any) => {
     const score = parseInt(scoreStr) || 0;
     if (score >= 7) return 'bg-red-800 text-white animate-pulse';
@@ -225,13 +292,32 @@ const DashboardSection: React.FC<Props> = React.memo(({
     return 'bg-emerald-600 text-white';
   };
 
-  const VitalItem = ({ label, value, unit, alert = false }: { label: string, value: string, unit?: string, alert?: boolean }) => (
-    <div className={`bg-white rounded p-1.5 shadow-sm flex flex-col justify-center items-center border ${alert ? 'border-red-400 bg-red-50' : 'border-slate-100'}`}>
-        <span className="block text-[9px] text-slate-400 font-bold uppercase leading-tight">{label}</span>
-        <span className={`leading-tight font-bold text-sm ${alert ? 'text-red-700' : 'text-slate-900'}`}>{value || '-'}</span>
-        {unit && <span className="block text-[8px] text-slate-500 font-normal leading-tight">{unit}</span>}
-    </div>
-  );
+  const VitalItem = ({ label, value, unit, status = 'normal' }: { label: string, value: string, unit?: string, status?: VitalStatus }) => {
+    let containerClass = 'bg-white border-slate-100';
+    let labelClass = 'text-slate-400 font-bold';
+    let valueClass = 'text-slate-900 font-bold';
+    let unitClass = 'text-slate-500 font-normal';
+
+    if (status === 'critical') {
+      containerClass = 'bg-red-600 border-red-700 animate-pulse shadow-md font-black ring-2 ring-red-400';
+      labelClass = 'text-red-100 font-black uppercase';
+      valueClass = 'text-white font-black text-sm drop-shadow';
+      unitClass = 'text-red-100 font-bold';
+    } else if (status === 'warning') {
+      containerClass = 'bg-red-50 border-red-300 ring-1 ring-red-200';
+      labelClass = 'text-red-700 font-bold uppercase';
+      valueClass = 'text-red-600 font-black text-sm';
+      unitClass = 'text-red-500 font-semibold';
+    }
+
+    return (
+      <div className={`rounded p-1.5 shadow-sm flex flex-col justify-center items-center border transition-all ${containerClass}`}>
+          <span className={`block text-[9px] uppercase leading-tight ${labelClass}`}>{label}</span>
+          <span className={`leading-tight text-sm ${valueClass}`}>{value || '-'}</span>
+          {unit && <span className={`block text-[8px] leading-tight ${unitClass}`}>{unit}</span>}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4 animate-fade-in pb-10 h-full flex flex-col">
@@ -283,12 +369,12 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                         <div className={`w-10 h-10 flex flex-col items-center justify-center rounded border shadow-sm shrink-0 ${getEsiColor(row.esiLevel)}`}><span className="text-[8px] font-bold uppercase leading-none mt-0.5">ESI</span><span className="text-xl font-black leading-none">{String(row.esiLevel).replace("'","")}</span></div>
                                     </div>
                                     {row.vitals && <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded border border-slate-100 mb-2">
-                                        <VitalItem label="PA" value={row.vitals.pa} />
-                                        <VitalItem label="FC" value={row.vitals.fc} unit="bpm" />
-                                        <VitalItem label="FR" value={row.vitals.fr} unit="irpm" />
-                                        <VitalItem label="TEMP" value={row.vitals.temp} unit="°C" />
-                                        <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" />
-                                        <VitalItem label="DOR" value={row.vitals.pain} />
+                                        <VitalItem label="PA" value={row.vitals.pa} status={getPasStatus(row.vitals.pa)} />
+                                        <VitalItem label="FC" value={row.vitals.fc} unit="bpm" status={getFcStatus(row.vitals.fc)} />
+                                        <VitalItem label="FR" value={row.vitals.fr} unit="irpm" status={getFrStatus(row.vitals.fr)} />
+                                        <VitalItem label="TEMP" value={row.vitals.temp} unit="°C" status={getTempStatus(row.vitals.temp)} />
+                                        <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" status={getSpo2Status(row.vitals.spo2)} />
+                                        <VitalItem label="DOR" value={row.vitals.pain} status={getPainStatus(row.vitals.pain)} />
                                     </div>}
                                     {obsDisplay && (
                                         <div className="mt-2 bg-yellow-50 text-yellow-900 p-1.5 rounded border border-yellow-200 text-[10px] font-bold uppercase flex items-center gap-1.5">
@@ -340,12 +426,12 @@ const DashboardSection: React.FC<Props> = React.memo(({
                                         <div className={`w-10 h-10 flex flex-col items-center justify-center rounded border shadow-md shrink-0 ${getNewsBadge(row.newsScore)}`}><span className="text-[8px] font-bold uppercase leading-none mt-0.5 opacity-80">NEWS</span><span className="text-xl font-black leading-none">{row.newsScore}</span></div>
                                     </div>
                                     {row.vitals && <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded border border-slate-100 mb-2">
-                                        <VitalItem label="PA" value={`${row.vitals.pas}x${row.vitals.pad}`} alert={isDeteriorating && score >= 7}/>
-                                        <VitalItem label="FC" value={row.vitals.fc} unit="bpm" alert={isDeteriorating && score >= 7}/>
-                                        <VitalItem label="FR" value={row.vitals.fr} unit="irpm" alert={isDeteriorating && score >= 7}/>
-                                        <VitalItem label="TEMP" value={row.vitals.temp} unit="°C" />
-                                        <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" alert={parseInt(row.vitals.spo2) < 92}/>
-                                        <VitalItem label="O2" value={row.vitals.o2Sup ? 'SIM' : 'NÃO'} alert={row.vitals.o2Sup === 'SIM'}/>
+                                        <VitalItem label="PA" value={`${row.vitals.pas}x${row.vitals.pad}`} status={getPasStatus('', row.vitals.pas)} />
+                                        <VitalItem label="FC" value={row.vitals.fc} unit="bpm" status={getFcStatus(row.vitals.fc)} />
+                                        <VitalItem label="FR" value={row.vitals.fr} unit="irpm" status={getFrStatus(row.vitals.fr)} />
+                                        <VitalItem label="TEMP" value={row.vitals.temp} unit="°C" status={getTempStatus(row.vitals.temp)} />
+                                        <VitalItem label="SPO2" value={row.vitals.spo2} unit="%" status={getSpo2Status(row.vitals.spo2)} />
+                                        <VitalItem label="O2" value={row.vitals.o2Sup ? 'SIM' : 'NÃO'} status={getO2Status(row.vitals.o2Sup)} />
                                     </div>}
                                     <div className={`text-[10px] p-2 rounded flex items-start gap-1 font-black uppercase shadow-sm ${isDeteriorating ? 'bg-red-600 text-white animate-pulse' : 'bg-emerald-50 text-emerald-900 border border-emerald-100'}`}>
                                         <Info size={12} className="shrink-0 mt-0.5"/><span>{row.riskText}</span>
